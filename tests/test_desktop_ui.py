@@ -614,11 +614,19 @@ def test_sound_toolbar_mirrors_settings(window):
     window.sound_toggle.setChecked(True)
     assert window.sound_button.isChecked()
 
-def test_authentication_is_one_three_option_control(window):
+def test_authentication_is_one_four_option_control(window):
     window.open_editor(None)
     assert "clave_method" not in window.fields
-    access=window.fields["access_mode"]
-    assert [access.itemData(i) for i in range(access.count())]==["certificate","clave_movil","clave_permanente"]
+    access = window.fields["access_mode"]
+    assert [
+        access.itemData(i)
+        for i in range(access.count())
+    ] == [
+        "certificate",
+        "clave_movil",
+        "clave_permanente",
+        "without_clave",
+    ]
 
 
 def test_chase_celebration_has_localized_proverb(window):

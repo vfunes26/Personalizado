@@ -137,17 +137,29 @@ def test_json_disclosure_has_no_nested_scroll_widget(owner,qt_app):
 
 def test_event_summary_preserves_custom_selection_and_supports_all(owner):
     from PySide6.QtCore import Qt
-    events=owner.notifications_panel.telegram_events
-    events.load(['office','booking'])
+
+    events = owner.notifications_panel.telegram_events
+    events.load(["office", "booking"])
+
     assert events.details.isHidden()
-    assert events.all_events.checkState()==Qt.CheckState.PartiallyChecked
-    assert events.value()==['office','booking']
+    assert events.all_events.checkState() == Qt.CheckState.PartiallyChecked
+    assert events.value() == ["office", "booking"]
+
     events.disclosure.setChecked(True)
     assert not events.details.isHidden()
+
     events.all_events.click()
-    assert events.value()==['auth','office','booking','error']
+    assert events.value() == [
+        "auth",
+        "office",
+        "booking",
+        "error",
+        "restriction",
+        "clave_only",
+    ]
+
     events.all_events.click()
-    assert events.value()==[]
+    assert events.value() == []
 
 
 def test_recipient_test_targets_only_clicked_chat(owner,monkeypatch):
