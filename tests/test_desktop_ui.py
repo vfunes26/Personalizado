@@ -74,7 +74,7 @@ def window(tmp_path, catalog_path, qt_app):
     assert not isValid(w), "GUI fixture must destroy the closed window before the next test"
 
 def test_three_tabs_and_profile_creation_requires_valid_data(window):
-    assert window.tabs.count() == 3
+    assert window.tabs.count() == 4
     assert not window.start_button.isEnabled()
     window.create_profile()
     assert window.fields['delay_min'].value()==.3

@@ -149,6 +149,8 @@ class ProfileStore:
         if errors:
             raise ProfileValidationError('\n'.join(errors))
         if existing is None:
+            if len(tasks) >= 10:
+                raise ProfileValidationError('Limite alcanzado: maximo 10 perfiles.')
             tasks.append(task)
         else:
             tasks[tasks.index(existing)] = task

@@ -50,6 +50,8 @@ class DesktopController(QObject):
         env.insert('TASKS_FILE', str(self.store.path))
         env.insert('CATALOG_FILE', str(self.store.catalog_path))
         env.insert('PYTHONUNBUFFERED', '1')
+        for key, value in getattr(self, 'extra_env', {}).items():
+            env.insert(key, value)
         self.process.setProcessEnvironment(env)
         self.stderr_tail = bytearray()
         self.reported_error = False

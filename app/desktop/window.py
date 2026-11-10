@@ -164,6 +164,10 @@ class DesktopWindow(QMainWindow):
         self._work()
         self._settings()
         self._statistics()
+        from .workers_panel import WorkersPanel
+        self.workers_panel = WorkersPanel(self)
+        workers_scroll = QScrollArea(); workers_scroll.setWidgetResizable(True); workers_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        workers_scroll.setWidget(self.workers_panel); self.tabs.addTab(workers_scroll, 'Trabajadores')
         self.tabs.currentChanged.connect(self.main_tab_changed)
         theme_bar = QWidget(); theme_layout = QHBoxLayout(theme_bar)
         theme_layout.setContentsMargins(12, 10, 20, 10)
@@ -2129,6 +2133,11 @@ class DesktopWindow(QMainWindow):
     def closeEvent(self, event):
         self.notification_delivery.stop()
         if getattr(self,'inbox_thread',None) is not None: self.inbox_thread.stop()
+        panel = getattr(self, 'workers_panel', None)
+        if panel is not None and panel.pool.any_active():
+            self.closing = True; panel.pool.stop_all()
+            if self.controller.active: self.controller.shutdown(close_browser=True)
+            event.ignore(); return
         if self.update_service.busy:
             self.closing=True;self.update_service.cancel()
             if self.controller.active:self.controller.shutdown(close_browser=True)

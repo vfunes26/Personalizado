@@ -153,6 +153,8 @@ class ProxyProfileStore:
             normalized["id"] = profile_id
 
             if existing is None:
+                if len(profiles) >= 10:
+                    raise ProxyProfileError("Limite alcanzado: maximo 10 proxies.")
                 profiles.append(normalized)
             else:
                 profiles[profiles.index(existing)] = normalized
