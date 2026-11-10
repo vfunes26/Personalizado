@@ -220,7 +220,7 @@ def _camoufox_proxy_options(task_id: str) -> dict:
     from .desktop.proxy_profiles import ProxyProfileStore
 
     store = ProxyProfileStore(runtime_root() / 'data' / 'proxy-profiles.json')
-    proxy = store.proxy_for_request(task_id)    proxy = store.proxy_for_request(task_id)
+    proxy = store.proxy_for_request(task_id)
     if proxy is None and os.environ.get('CITA_REQUIRE_PROXY') == '1':
         raise SiteCheckError('Proxy requerido y no disponible: el trabajador no se inicia con la IP local')
     if proxy is None:
