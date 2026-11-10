@@ -1,0 +1,64 @@
+name: Build Windows portable (personal)
+
+# Manual only: Actions -> "Build Windows portable (personal)" -> Run workflow.
+# Produces just the Windows portable ZIP (no MSI, macOS, Linux, tags, releases or attestations).
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_tests:
+        description: Run the full test suite before packaging (recommended)
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-portable-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-portable:
+    runs-on: windows-2022
+    timeout-minutes: 75
+    defaults:
+      run:
+        shell: bash
+    env:
+      QT_QPA_PLATFORM: offscreen
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: '3.13'
+      - name: Install dependencies
+        run: uv sync --frozen --extra desktop --extra build
+      - name: Check release metadata
+        run: uv run python scripts/preflight.py --metadata-only
+      - name: Check source privacy
+        run: uv run python scripts/check_privacy.py --tree .
+      - name: Test
+        if: inputs.run_tests
+        timeout-minutes: 20
+        run: uv run pytest -v -s -o addopts= --tb=short -o faulthandler_timeout=120
+      - name: Fetch public browser (Camoufox)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          uv run python -m camoufox fetch
+          uv run python -c "from camoufox.pkgman import launch_path; print(launch_path())"
+      - name: Build native application
+        run: uv run python scripts/build_desktop_app.py
+      - name: Offline packaged browser and worker IPC
+        run: uv run python scripts/verify_bundle.py 'data/dist/Cita Extranjeria Helper'
+      - name: Package portable ZIP
+        run: uv run python scripts/package_release.py --platform windows --arch x64 --portable
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: windows-portable
+          path: data/releases/*-portable.zip
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14

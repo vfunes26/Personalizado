@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="1010" viewBox="0 0 820 1010" role="img" aria-labelledby="title desc">
+<title id="title">Funcionamiento de la aplicación</title><desc id="desc">Recorrido hasta la reserva manual. Dos opciones independientes: esperar o rellenar el formulario; Salir o recargar el resultado. Las flechas muestran los retornos.</desc><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10" fill="#57606a" /></marker><style>text{font-family:Arial,sans-serif;fill:#24292f;font-size:17px}.small{font-size:14px;fill:#57606a}.option{font-size:15px;fill:#286b9f}.edge{fill:none;stroke:#57606a;stroke-width:1.7;marker-end:url(#arrow);stroke-linejoin:round}.loop{stroke:#286b9f}.box{fill:#f6f8fa;stroke:#d0d7de;stroke-width:1.4}</style></defs>
+<rect width="820" height="1010" fill="#ffffff" />
+<text x="45" y="35" class="" text-anchor="start">Cita Extranjeria Helper</text>
+<text x="45" y="62" class="small" text-anchor="start">De arriba abajo. Las flechas indican las condiciones de retorno.</text>
+<path class="edge" d="M198 140V170" />
+<path class="edge" d="M198 234V290" />
+<path class="edge" d="M198 354V425" />
+<path class="edge" d="M198 489V565" />
+<path class="edge" d="M198 629V730" />
+<path class="edge" d="M198 794V860" />
+<path class="edge loop" d="M340 322H660V265H198V290" />
+<path class="edge loop" d="M340 597H660V535H198V565" />
+<path class="edge loop" d="M340 629H780V153H198V170" />
+<rect x="55" y="90" width="285" height="50" rx="9" class="box" />
+<text x="198" y="121" class="" text-anchor="middle">Inicio · seleccionar perfil</text>
+<rect x="55" y="170" width="285" height="64" rx="9" class="box" />
+<text x="198" y="196" class="" text-anchor="middle">Provincia → trámite → acceso</text>
+<text x="198" y="219" class="small" text-anchor="middle">Según el perfil seleccionado</text>
+<rect x="55" y="290" width="285" height="64" rx="9" class="box" />
+<text x="198" y="316" class="" text-anchor="middle">Formulario del solicitante</text>
+<text x="198" y="339" class="small" text-anchor="middle">Datos: introducir / copiar</text>
+<rect x="55" y="425" width="285" height="64" rx="9" class="box" />
+<text x="198" y="451" class="" text-anchor="middle">Menú de solicitud</text>
+<text x="198" y="474" class="small" text-anchor="middle">Solicitar cita</text>
+<rect x="55" y="565" width="285" height="64" rx="9" class="box" />
+<text x="198" y="591" class="" text-anchor="middle">Resultado de búsqueda</text>
+<text x="198" y="614" class="small" text-anchor="middle">Sin citas u oficinas disponibles</text>
+<rect x="55" y="730" width="285" height="64" rx="9" class="box" />
+<text x="198" y="756" class="" text-anchor="middle">Oficina → datos de contacto</text>
+<text x="198" y="779" class="small" text-anchor="middle">1 oficina — auto · varias — manual</text>
+<rect x="55" y="860" width="285" height="64" rx="9" class="box" style="fill:#e8f5ec;stroke:#41845e" />
+<text x="198" y="886" class="" text-anchor="middle">Cita → control manual</text>
+<text x="198" y="909" class="small" text-anchor="middle">Fecha, hora, CAPTCHA, confirmación</text>
+<text x="360" y="312" class="option" text-anchor="start">Sin citas · opción «Esperar»</text>
+<text x="213" y="389" class="option" text-anchor="start">Sin aviso / opción «Rellenar y continuar»</text>
+<text x="360" y="587" class="option" text-anchor="start">Sin citas · opción «Recargar resultado»</text>
+<text x="360" y="143" class="option" text-anchor="start">Sin citas · opción «Mediante Salir» / botón Aceptar</text>
+<path d="M621 317L631 322L621 327Z" fill="#286b9f" />
+<path d="M621 592L631 597L621 602Z" fill="#286b9f" />
+<path d="M342 148L332 153L342 158Z" fill="#286b9f" />
+<text x="213" y="686" class="small" text-anchor="start">Oficinas disponibles</text>
+<path d="M45 958H775" stroke="#d0d7de" />
+<text x="45" y="984" class="small" text-anchor="start">Errores y recuperación por separado; sin acciones automáticas cuando aparece una cita.</text>
+</svg>
