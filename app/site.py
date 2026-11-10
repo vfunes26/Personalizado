@@ -215,6 +215,23 @@ def _background_browser_prefs():
     return prefs
 
 
+def _camoufox_proxy_options(task_id: str) -> dict:
+    """Return the single proxy assigned to this request profile, if enabled."""
+    from .desktop.proxy_profiles import ProxyProfileStore
+
+    store = ProxyProfileStore(runtime_root() / 'data' / 'proxy-profiles.json')
+    proxy = store.proxy_for_request(task_id)
+    if proxy is None:
+        return {}
+
+    config = {'server': proxy['server']}
+    if proxy.get('username'):
+        config['username'] = proxy['username']
+    if proxy.get('password'):
+        config['password'] = proxy['password']
+    return {'proxy': config}
+
+
 def _browser_profile_location(settings: Settings, task_id: str) -> Path:
     root = Path(settings.browser_profile_directory)
     if not root.is_absolute():
@@ -439,6 +456,8 @@ class IcpPlusChecker:
             "main_world_eval": True,
             "firefox_user_prefs": _background_browser_prefs(),
         }
+        options.update(_camoufox_proxy_options(task.id))
+
         packaged_browser = bundled_browser()
         if packaged_browser:
             from .desktop.paths import bundled_browser_major_version
