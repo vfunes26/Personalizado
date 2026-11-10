@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (QAbstractButton, QAbstractItemView, QApplication,
     QDialog, QDialogButtonBox, QButtonGroup, QGridLayout, QLayout, QHeaderView, QMenu, QToolButton, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem,
     QMainWindow, QPushButton, QScrollArea, QSizePolicy, QTabWidget, QFrame,
     QListView, QStyledItemDelegate, QStyleOptionViewItem, QStyle,
-    QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
+    QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget, QMessageBox)
 
 from ..config import AppointmentProtection, TIE_PROCEDURE, REGRESO_PROCEDURE, PROCEDURE_NAMES, _load_catalog, load_dotenv
 from ..assist_flow import LABELS
@@ -555,7 +555,80 @@ class DesktopWindow(QMainWindow):
         profile_tabs.addTab(timing_scroll,'Тайминги и повторы')
         from .notification_widgets import NotificationPanel
         self.notifications_panel=NotificationPanel(self)
-        profile_tabs.addTab(self.notifications_panel.scroll,'Уведомления'); form.addWidget(profile_tabs,1)
+        profile_tabs.addTab(self.notifications_panel.scroll,'Уведомления')
+
+        proxy_page=QWidget()
+        proxy_layout=QVBoxLayout(proxy_page)
+        proxy_layout.setContentsMargins(18,18,18,18)
+        proxy_layout.setSpacing(12)
+        proxy_layout.addWidget(label(
+            'Asigna un proxy fijo a este perfil. Si está desactivado, Camoufox utilizará la conexión normal del equipo.',
+            muted=True,
+        ))
+
+        proxy_grid=QGridLayout()
+        proxy_grid.setHorizontalSpacing(12)
+        proxy_grid.setVerticalSpacing(10)
+
+        self.proxy_selector=ProfileComboBox()
+        self.proxy_selector.setAccessibleName('Perfil proxy')
+        proxy_grid.addWidget(ProfileField('Proxy asignado',self.proxy_selector),0,0,1,2)
+
+        self.proxy_label_input=QLineEdit()
+        self.proxy_label_input.setMaxLength(100)
+        proxy_grid.addWidget(ProfileField('Nombre del proxy',self.proxy_label_input),1,0,1,2)
+
+        self.proxy_server_input=QLineEdit()
+        self.proxy_server_input.setPlaceholderText('http://host:puerto o socks5://host:puerto')
+        proxy_grid.addWidget(ProfileField('Servidor',self.proxy_server_input),2,0,1,2)
+
+        self.proxy_username_input=QLineEdit()
+        proxy_grid.addWidget(ProfileField('Usuario',self.proxy_username_input),3,0)
+
+        self.proxy_password_input=QLineEdit()
+        self.proxy_password_input.setEchoMode(QLineEdit.EchoMode.Password)
+        proxy_grid.addWidget(ProfileField('Contraseña',self.proxy_password_input),3,1)
+
+        proxy_layout.addLayout(proxy_grid)
+
+        proxy_actions=QHBoxLayout()
+        self.proxy_new_button=QPushButton('Nuevo')
+        self.proxy_new_button.clicked.connect(self.new_proxy_definition)
+        proxy_actions.addWidget(self.proxy_new_button)
+
+        self.proxy_save_button=QPushButton('Guardar proxy')
+        self.proxy_save_button.setProperty('primary',True)
+        self.proxy_save_button.clicked.connect(self.save_proxy_definition)
+        proxy_actions.addWidget(self.proxy_save_button)
+
+        self.proxy_delete_button=QPushButton('Eliminar proxy')
+        self.proxy_delete_button.clicked.connect(self.delete_proxy_definition)
+        proxy_actions.addWidget(self.proxy_delete_button)
+        proxy_actions.addStretch()
+        proxy_layout.addLayout(proxy_actions)
+
+        proxy_assignment=QHBoxLayout()
+        proxy_assignment.addWidget(label('Usar este proxy en el perfil'))
+        self.proxy_toggle=Toggle('Usar proxy en este perfil')
+        proxy_assignment.addWidget(self.proxy_toggle)
+        proxy_assignment.addStretch()
+        proxy_layout.addLayout(proxy_assignment)
+
+        self.proxy_status=label(
+            'El proxy solo se aplicará cuando esta opción esté activada.',
+            muted=True,
+        )
+        proxy_layout.addWidget(self.proxy_status)
+        proxy_layout.addStretch()
+
+        proxy_scroll=QScrollArea()
+        proxy_scroll.setWidgetResizable(True)
+        proxy_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        proxy_scroll.setWidget(proxy_page)
+        profile_tabs.addTab(proxy_scroll,'Proxy')
+        self.proxy_selector.currentIndexChanged.connect(self.load_selected_proxy)
+
+        form.addWidget(profile_tabs,1)
         for previous,current in zip(self.profile_focus_fields,self.profile_focus_fields[1:]):
             QWidget.setTabOrder(previous,current)
         profile_tabs.currentChanged.connect(self.profile_tab_changed)
@@ -1065,7 +1138,115 @@ class DesktopWindow(QMainWindow):
         self.search_behavior_text = self.search_behavior_texts[message_index]
         self.search_behavior_icon.setPixmap(self.control_icon('shield' if risk else 'check').pixmap(QSize(18,18)))
 
+    def _proxy_store(self):
+        from .proxy_profiles import ProxyProfileStore
+        return ProxyProfileStore(runtime_root() / 'data' / 'proxy-profiles.json')
+
+    def _refresh_proxy_selector(self, selected_id=None):
+        raw=self._proxy_store().load()
+        self.proxy_selector.blockSignals(True)
+        self.proxy_selector.clear()
+        self.proxy_selector.addItem('Sin proxy',None)
+        for proxy in raw['proxy_profiles']:
+            self.proxy_selector.addItem(proxy['label'],proxy['id'])
+        index=self.proxy_selector.findData(selected_id)
+        self.proxy_selector.setCurrentIndex(max(0,index))
+        self.proxy_selector.blockSignals(False)
+        self.load_selected_proxy()
+
+    def load_proxy_editor(self, request_profile_id):
+        try:
+            store=self._proxy_store()
+            assignment=(
+                store.assignment_for(request_profile_id)
+                if request_profile_id else
+                {'proxy_profile_id':None,'enabled':False}
+            )
+            self._refresh_proxy_selector(assignment['proxy_profile_id'])
+            self.proxy_toggle.setChecked(
+                bool(assignment['enabled'] and self.proxy_selector.currentData())
+            )
+            self.proxy_status.setText(
+                'Proxy activo para este perfil.'
+                if self.proxy_toggle.isChecked()
+                else 'Conexión normal del equipo. No se utilizará ningún proxy.'
+            )
+        except (OSError,ValueError) as exc:
+            self.proxy_toggle.setChecked(False)
+            self.proxy_status.setText(str(exc))
+
+    def load_selected_proxy(self,*_):
+        proxy_id=self.proxy_selector.currentData()
+        self.proxy_editing_id=proxy_id
+        try:
+            raw=self._proxy_store().load()
+            proxy=next(
+                (item for item in raw['proxy_profiles'] if item.get('id')==proxy_id),
+                None,
+            )
+        except (OSError,ValueError) as exc:
+            self.proxy_status.setText(str(exc))
+            proxy=None
+
+        self.proxy_label_input.setText(proxy.get('label','') if proxy else '')
+        self.proxy_server_input.setText(proxy.get('server','') if proxy else '')
+        self.proxy_username_input.setText(proxy.get('username','') if proxy else '')
+        self.proxy_password_input.setText(proxy.get('password','') if proxy else '')
+        self.proxy_delete_button.setEnabled(proxy is not None)
+
+    def new_proxy_definition(self):
+        self.proxy_selector.setCurrentIndex(0)
+        self.proxy_editing_id=None
+        self.proxy_label_input.clear()
+        self.proxy_server_input.clear()
+        self.proxy_username_input.clear()
+        self.proxy_password_input.clear()
+        self.proxy_label_input.setFocus()
+        self.proxy_status.setText('Introduce los datos del nuevo proxy y guárdalo.')
+
+    def save_proxy_definition(self):
+        from .proxy_profiles import ProxyProfileError
+        fields={
+            'label':self.proxy_label_input.text(),
+            'server':self.proxy_server_input.text(),
+            'username':self.proxy_username_input.text(),
+            'password':self.proxy_password_input.text(),
+        }
+        try:
+            proxy_id=self._proxy_store().save_proxy_profile(
+                self.proxy_editing_id,
+                fields,
+            )
+            self._refresh_proxy_selector(proxy_id)
+            self.proxy_status.setText('Proxy guardado correctamente.')
+        except (ProxyProfileError,OSError) as exc:
+            self.proxy_status.setText(str(exc))
+
+    def delete_proxy_definition(self):
+        proxy_id=self.proxy_selector.currentData()
+        if not proxy_id:
+            return
+        answer=QMessageBox.question(
+            self,
+            'Eliminar proxy',
+            '¿Eliminar este proxy y sus asignaciones?',
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer!=QMessageBox.StandardButton.Yes:
+            return
+        try:
+            self._proxy_store().delete_proxy_profile(proxy_id)
+            self.proxy_toggle.setChecked(False)
+            self._refresh_proxy_selector()
+            self.proxy_status.setText('Proxy eliminado.')
+        except (OSError,ValueError) as exc:
+            self.proxy_status.setText(str(exc))
+
     def profile_tab_changed(self,index):
+        if index==self.profile_tabs.indexOf(self.notifications_panel.scroll):
+            self.notifications_panel.ensure_secrets_loaded()
+        self.update_editor_height()
         if index==self.profile_tabs.indexOf(self.notifications_panel.scroll):
             self.notifications_panel.ensure_secrets_loaded()
         self.update_editor_height()
@@ -1073,6 +1254,7 @@ class DesktopWindow(QMainWindow):
     def open_editor(self, profile_id):
         self.editing_id=profile_id; self.editor_revision=self.store.revision()
         raw=self.store.raw_profile(profile_id) if profile_id else {}
+        self.load_proxy_editor(profile_id)
         self.notifications_panel.load(raw.get('notifications',{}),defer_secrets=True)
         self.no_slots_mode_combo.setCurrentIndex(max(0,self.no_slots_mode_combo.findData(raw.get('request',{}).get('no_slots_mode','salir'))))
         self.applicant_no_slots_combo.setCurrentIndex(max(0,self.applicant_no_slots_combo.findData(raw.get('request',{}).get('applicant_no_slots_mode','wait'))))
@@ -1163,6 +1345,23 @@ class DesktopWindow(QMainWindow):
         except (ProfileValidationError,ProfileConflictError,OSError,NotificationError) as exc:
             for ref in created:self.notifications_panel.vault.delete(ref)
             self.form_error.setText(str(exc) if not isinstance(exc,OSError) else 'Не удалось сохранить файл профилей.'); self.retranslate(); return
+        self.editing_id=profile_id
+        self.editor_revision=self.store.revision()
+        from .proxy_profiles import ProxyProfileError
+        try:
+            self._proxy_store().bind_request_profile(
+                profile_id,
+                self.proxy_selector.currentData(),
+                enabled=self.proxy_toggle.isChecked(),
+            )
+        except (ProxyProfileError,OSError) as exc:
+            self.form_error.setText(
+                'El perfil se guardó, pero no se pudo guardar su asignación de proxy: '
+                + str(exc)
+            )
+            self.retranslate()
+            return
+
         for ref in old:self.notifications_panel.vault.delete(ref)
         if self.notification_delivery.profile_id==profile_id:self.notification_delivery.generation+=1
         self.profile_editor.accept(); self.refresh_profiles(profile_id)

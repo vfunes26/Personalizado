@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.site import (
+    _camoufox_proxy_options,
     _browser_launch_error_code,
     _challenge_code,
     _configure_browser_path,
@@ -843,3 +844,44 @@ def test_site_helpers_propagate_fresh_pass_restart(method):
         asyncio.run(getattr(checker, method)(*arguments))
     assert error.value is restart
     page.wait_for_timeout.assert_not_awaited()
+
+def test_camoufox_receives_only_the_assigned_active_proxy(monkeypatch, tmp_path):
+    from app.desktop.proxy_profiles import ProxyProfileStore
+
+    monkeypatch.setattr('app.site.runtime_root', lambda: tmp_path)
+    store = ProxyProfileStore(tmp_path / 'data' / 'proxy-profiles.json')
+
+    proxy_id = store.save_proxy_profile(None, {
+        'label': 'Proxy fijo',
+        'server': 'http://127.0.0.1:8080',
+        'username': 'user',
+        'password': 'secret',
+    })
+    store.bind_request_profile('request_a', proxy_id, enabled=True)
+    store.bind_request_profile('request_b', proxy_id, enabled=False)
+
+    assert _camoufox_proxy_options('request_a') == {
+        'proxy': {
+            'server': 'http://127.0.0.1:8080',
+            'username': 'user',
+            'password': 'secret',
+        }
+    }
+    assert _camoufox_proxy_options('request_b') == {}
+    assert _camoufox_proxy_options('request_without_proxy') == {}
+
+
+def test_camoufox_proxy_omits_empty_credentials(monkeypatch, tmp_path):
+    from app.desktop.proxy_profiles import ProxyProfileStore
+
+    monkeypatch.setattr('app.site.runtime_root', lambda: tmp_path)
+    store = ProxyProfileStore(tmp_path / 'data' / 'proxy-profiles.json')
+    proxy_id = store.save_proxy_profile(None, {
+        'label': 'Proxy sin autenticación',
+        'server': 'socks5://127.0.0.1:1080',
+    })
+    store.bind_request_profile('request_a', proxy_id, enabled=True)
+
+    assert _camoufox_proxy_options('request_a') == {
+        'proxy': {'server': 'socks5://127.0.0.1:1080'}
+    }

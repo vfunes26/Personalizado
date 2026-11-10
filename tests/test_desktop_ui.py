@@ -1483,3 +1483,56 @@ def test_viewing_stopped_budget_consumes_next_day_estimate_once(window, task_map
     assert store.load().next_target is None
     current = RealDateTime(2026, 11, 4, 12, tzinfo=MADRID)
     assert window.current_daily_budget(profile_id)['target'] == 50
+
+
+def test_proxy_is_saved_separately_and_reloaded_per_request_profile(
+    window, monkeypatch, tmp_path
+):
+    monkeypatch.setattr(
+        'app.desktop.window.runtime_root',
+        lambda: tmp_path,
+    )
+
+    window.create_profile()
+    fields = window.fields
+
+    for key, value in dict(
+        label='Perfil con proxy',
+        full_name='NOMBRE APELLIDO',
+        document_number='X0000000T',
+        phone='600000000',
+        email='demo@example.com',
+    ).items():
+        fields[key].setText(value)
+
+    fields['nationality'].setCurrentText('UCRANIA')
+
+    window.proxy_label_input.setText('Proxy de prueba')
+    window.proxy_server_input.setText('http://127.0.0.1:8080')
+    window.proxy_username_input.setText('user')
+    window.proxy_password_input.setText('secret')
+    window.save_proxy_definition()
+
+    proxy_id = window.proxy_selector.currentData()
+    assert proxy_id
+
+    window.proxy_toggle.setChecked(True)
+    window.save_profile()
+
+    request_id = window.profile_combo.currentData()
+    proxy_file = tmp_path / 'data' / 'proxy-profiles.json'
+    assert proxy_file.exists()
+
+    from app.desktop.proxy_profiles import ProxyProfileStore
+    store = ProxyProfileStore(proxy_file)
+
+    assert store.assignment_for(request_id) == {
+        'proxy_profile_id': proxy_id,
+        'enabled': True,
+    }
+
+    window.open_editor(request_id)
+
+    assert window.proxy_selector.currentData() == proxy_id
+    assert window.proxy_toggle.isChecked()
+    assert window.proxy_server_input.text() == 'http://127.0.0.1:8080'
