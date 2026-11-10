@@ -801,6 +801,9 @@ class DesktopWindow(QMainWindow):
             QWidget.setTabOrder(previous,current)
 
     def create_profile(self):
+        if len(getattr(self, 'profiles', [])) >= 10:
+            self.statusBar().showMessage('Limite alcanzado: maximo 10 perfiles.', 7000)
+            return
         self.open_editor(None)
 
     def edit_profile(self, *_):
