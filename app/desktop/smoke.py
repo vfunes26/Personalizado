@@ -92,7 +92,7 @@ def main():
     window = DesktopWindow(store, DesktopController(store))
     window.show()
     app.processEvents()
-    assert window.tabs.count() == 3
+    assert window.tabs.count() == 4
     window.tabs.setCurrentIndex(1)
     assert window.statistics_panel.isVisible()
     window.tabs.setCurrentIndex(2)
