@@ -3,7 +3,7 @@ import copy
 from PySide6.QtCore import QObject, Signal
 from .notification_jobs import NotificationJobs
 from .notification_store import NotificationVault
-from ..notifications import settings,EventRouter,make_event,Telegram,webhook_request,send_request,state_event,NotificationError,telegram_message
+from ..notifications import settings,EventRouter,make_event,Telegram,webhook_request,send_request,state_event,NotificationError,telegram_message,profile_data_text
 
 
 class NotificationDelivery(QObject):
@@ -65,6 +65,7 @@ class NotificationDelivery(QObject):
         generation=self.generation
         current=lambda:not self.closed and self.generation==generation and self.profile_id==profile_id
         message=telegram_message(payload,language,state.get('booking_details'),offices=state.get('available_offices'),preferred=raw.get('request',{}).get('office',''))
+        message=profile_data_text(raw)+message
         for channel in ('telegram','webhook'):
             if not (telegram_event if channel=='telegram' else event):continue
             connection=copy.deepcopy(config[channel])

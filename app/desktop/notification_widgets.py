@@ -278,11 +278,17 @@ class NotificationPanel(QWidget):
 
     def hook_config(self):return dict(self.webhook,url=self.url.text().strip(),method=self.method.currentText())
 
+    def send_test_with_template(self,token,chat_id,message):
+        from ..profile_intake import template_text
+        client=Telegram(token);elapsed=client.send(chat_id,message)
+        client.send(chat_id,template_text())
+        return elapsed
+
     def test_recipient(self,recipient,control):
         token=self.token.text().strip()
         event=make_event('test',self.owner.fields['label'].text().strip(),self.owner.fields['province'].currentText(),self.owner.preferences['language'])
         generation=self.generation
-        control.start(self.jobs,lambda:Telegram(token).send(recipient['id'],event['message']),
+        control.start(self.jobs,lambda:self.send_test_with_template(token,recipient['id'],event['message']),
                       lambda result:'Сообщение принято Telegram',lambda:generation==self.generation)
 
     def test(self,channel):

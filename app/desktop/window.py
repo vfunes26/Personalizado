@@ -456,7 +456,7 @@ class DesktopWindow(QMainWindow):
                 elif key=='fill_mode':
                     widget.addItem('Ввести данные профиля','manual'); widget.addItem('Скопировать с сайта','copy')
                 elif key=='nationality':
-                    widget.addItems(countries); widget.setEditable(True)
+                    widget.addItems(countries); widget.setPlaceholderText('Selecciona la nacionalidad')
                 elif key=='province': widget.addItems(sorted(_load_catalog(self.store.catalog_path)['provinces']))
                 elif key=='document_type':
                     for text,value in [('NIE','NIE'),('DNI','DNI'),('Паспорт','PASSPORT')]:widget.addItem(text,value)
@@ -630,6 +630,7 @@ class DesktopWindow(QMainWindow):
         proxy_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         proxy_scroll.setWidget(proxy_page)
         profile_tabs.addTab(proxy_scroll,'Proxy')
+        profile_tabs.setTabVisible(profile_tabs.indexOf(proxy_scroll),False)
         self.proxy_selector.currentIndexChanged.connect(self.load_selected_proxy)
 
         form.addWidget(profile_tabs,1)
@@ -651,6 +652,7 @@ class DesktopWindow(QMainWindow):
         self.updates_toggle=self.toggle_row(layout,'Автоматически проверять обновления','Проверять GitHub Releases при запуске и раз в сутки. Скачивание и установка — по кнопке.',key='updates')
         layout.addWidget(label('Telegram',name='sectionHeading'))
         self.telegram_toggle=self.toggle_row(layout,'Создавать профили из Telegram','Бот принимает шаблон от подключённых получателей и создаёт профиль. Работает, пока приложение открыто.',key='telegram_profiles')
+        self.telegram_status=label('',muted=True); self.telegram_status.setWordWrap(True); self.telegram_status.setVisible(False); layout.addWidget(self.telegram_status)
         layout.addWidget(label('Интерфейс',name='sectionHeading'))
         self.settings_language=ProfileComboBox()
         for code,title in LANGUAGES.items(): self.settings_language.addItem(code.upper()+' · '+title,code)
@@ -731,7 +733,14 @@ class DesktopWindow(QMainWindow):
             self.retranslate()
         self.update_start()
         task=next((t for t in self.profiles if t.id==self.profile_combo.currentData()),None)
-        self.service_label.setText(self.t('Услуга')+': '+PROCEDURE_NAMES.get(task.procedure,task.procedure) if task else '')
+        proxy_note=''
+        if task:
+            try:
+                assigned=self._proxy_store().proxy_for_request(task.id)
+                proxy_note=('Proxy: '+assigned.get('label','')) if assigned else 'Sin proxy (IP local)'
+            except Exception:
+                proxy_note=''
+        self.service_label.setText((proxy_note+' · ' if proxy_note else '')+self.t('Услуга')+': '+PROCEDURE_NAMES.get(task.procedure,task.procedure) if task else '')
         self.service_label.setVisible(task is not None);self.service_icon.setVisible(task is not None)
         self.restart_action.setEnabled(bool(self.profile_combo.currentData()) and not self.state.get('browser_retained',False))
 
@@ -1289,6 +1298,7 @@ class DesktopWindow(QMainWindow):
             combo.setCurrentIndex(max(0,combo.findData(value)));combo.blockSignals(False)
         self._editor_procedure=procedure;self._document_kind=document_type if procedure==REGRESO_PROCEDURE else 'NIE'
         self._regreso_document_type=document_type;self._document_drafts={self._document_kind:str(values['document_number'])}
+        self.fields['nationality'].setCurrentIndex(-1)
         self.fields['nationality'].setCurrentText(applicant.get('nationality',''))
         self.fields['province'].setCurrentText(raw.get('request',{}).get('province','Barcelona'))
         access=raw.get('request',{}).get('access_mode','certificate')
@@ -1405,8 +1415,22 @@ class DesktopWindow(QMainWindow):
         elif not wanted and thread is not None:
             thread.stop(); self.inbox_thread=None
 
+    def update_telegram_status(self):
+        status=getattr(self,'telegram_status',None)
+        if status is None:return
+        thread=getattr(self,'inbox_thread',None)
+        text=''
+        if thread is not None:
+            source=getattr(getattr(thread,'inbox',None),'source',None)
+            reason=getattr(thread,'last_error','')
+            if source is not None:text='Buzón de Telegram activo: escribe /plantilla desde el chat conectado para recibir el formato.'
+            elif reason:text='Buzón de Telegram inactivo: '+reason
+            else:text='Buzón de Telegram iniciando…'
+        status.setText(text);status.setVisible(bool(text))
+
     def watch_profiles_file(self):
         """Show profiles created from outside (Telegram) without touching an open editor or a running search."""
+        self.update_telegram_status()
         try: ids={t.id for t in self.store.load()}
         except ProfileValidationError: return
         known=getattr(self,'_known_profile_ids',None)
@@ -1960,6 +1984,10 @@ class DesktopWindow(QMainWindow):
         if self.preferences.get('automatic_updates',True) and not self.update_service.busy and self.update_service.due():
             self.check_updates()
 
+    def startup_update_check(self):
+        if self.preferences.get('automatic_updates',True) and not self.update_service.busy:
+            self.check_updates()
+
     def check_updates(self):
         if self.update_service.check():
             self.update_message='Проверяем обновления…';self.render_updates()
@@ -2167,7 +2195,7 @@ def run_desktop():
     window.sync_telegram_inbox()
     profiles_timer=QTimer(window);profiles_timer.setInterval(4000)
     profiles_timer.timeout.connect(window.watch_profiles_file);profiles_timer.start()
-    QTimer.singleShot(2000,window.automatic_update_check)
+    QTimer.singleShot(2000,window.startup_update_check)
     update_timer=QTimer(window);update_timer.setInterval(3600_000)
     update_timer.timeout.connect(window.automatic_update_check);update_timer.start()
     return app.exec()

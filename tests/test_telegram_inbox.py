@@ -88,7 +88,7 @@ def test_submission_creates_profile_with_own_token_copy_and_masks_reply():
         assert set(telegram['events']) == set(EVENTS) and telegram['recipients'][0]['id'] == str(ALLOWED)
         assert raw['request']['office'].startswith('CNP COMISARIA GRANOLLERS')
         reply = client.sent[-1][1]
-        assert reply.startswith('✅') and nie(1234567) not in reply and 'ana@' not in reply
+        assert reply.startswith('✅') and nie(1234567) in reply and 'ana@correo.com' in reply
         assert ('deleteMessage', {'chat_id': str(ALLOWED), 'message_id': 10}) in client.calls  # data removed from chat
 
 

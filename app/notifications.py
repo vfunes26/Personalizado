@@ -117,6 +117,22 @@ def make_event(kind,profile,province,language):
                 action_required=kind!='test',message=f'{t(title)}\n\n{t("Профиль")}: {profile}\n{t("Провинция")}: {province}\n\n{t(action)}{extra}\n\nCita Extranjeria Helper')
 
 
+def profile_data_text(raw):
+    """Datos del perfil en texto plano para los reportes de Telegram (solo Telegram; el webhook no cambia)."""
+    try:
+        request=raw.get('request') or {};applicant=raw.get('applicant') or {};contact=applicant.get('contact') or {}
+    except AttributeError:return ''
+    access={'certificate':'Certificado','clave_movil':'Cl@ve Móvil','clave_permanente':'Cl@ve Permanente','without_clave':'Sin Cl@ve','clave':'Cl@ve'}
+    document=' '.join(str(x) for x in (applicant.get('document_type'),applicant.get('document_number')) if x)
+    rows=[('Perfil',raw.get('label')),('Provincia',request.get('province')),('Trámite',request.get('procedure')),
+          ('Acceso',access.get(request.get('access_mode'),request.get('access_mode'))),('Oficina',request.get('office') or 'cualquiera'),
+          ('Documento',document),('Nombre',applicant.get('full_name')),('Nacionalidad',applicant.get('nationality')),
+          ('Teléfono',contact.get('phone')),('Correo',contact.get('email'))]
+    lines=[f'{name}: {value}' for name,value in rows if value]
+    if not any(value for name,value in rows if name not in ('Perfil','Oficina')):return ''
+    return '📋 Datos del perfil\n'+'\n'.join(lines)+'\n\n'
+
+
 def telegram_message(event,language,details=None,*,offices=None,preferred=''):
     """Enrich Telegram only; webhook schema/message remains unchanged."""
     if event.get('event')=='office' and isinstance(offices,list):

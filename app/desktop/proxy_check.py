@@ -13,6 +13,33 @@ TARGET_HOST = 'icp.administracionelectronica.gob.es'
 TARGET_PORT = 443
 
 
+def normalize_proxy(server, username='', password=''):
+    """Acepta host:puerto, host:puerto:usuario:clave, usuario:clave@host:puerto y esquema opcional.
+
+    Devuelve (servidor_con_esquema, usuario, clave). Sin esquema se asume http://.
+    Los campos usuario/clave ya escritos tienen prioridad sobre los pegados en el servidor.
+    """
+    text = (server or '').strip()
+    username, password = (username or '').strip(), password or ''
+    if not text:
+        return '', username, password
+    scheme = 'http'
+    if '://' in text:
+        scheme, text = text.split('://', 1)
+        scheme = scheme.strip().lower() or 'http'
+    text = text.strip().rstrip('/')
+    if '@' in text:
+        credentials, text = text.rsplit('@', 1)
+        user_part, _, pass_part = credentials.partition(':')
+        username, password = username or user_part, password or pass_part
+    else:
+        parts = text.split(':')
+        if len(parts) == 4:
+            text = ':'.join(parts[:2])
+            username, password = username or parts[2], password or parts[3]
+    return f'{scheme}://{text}', username, password
+
+
 def _read_exact(sock, size):
     data = b''
     while len(data) < size:

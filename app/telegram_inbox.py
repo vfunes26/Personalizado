@@ -183,7 +183,7 @@ class TelegramInbox:
                 return True
             profile_id = self._create(result.fields)
             extra = ('\n\n' + '\n'.join('ℹ ' + w for w in result.warnings)) if result.warnings else ''
-            self._reply(chat_id, '✅ Perfil creado\n\n' + result.summary + extra
+            self._reply(chat_id, '✅ Perfil creado\n\n' + (result.full_summary or result.summary) + extra
                         + '\n\nYa aparece en la app. Inicie la búsqueda desde allí (Seguimiento → Iniciar).')
             log.info('telegram_inbox_profile_created', extra={'profile_id': profile_id})
         except RuntimeError as exc:

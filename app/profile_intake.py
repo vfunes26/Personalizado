@@ -110,6 +110,7 @@ class IntakeResult:
     errors: list = field(default_factory=list)
     warnings: list = field(default_factory=list)
     summary: str = ''
+    full_summary: str = ''
     identity: tuple = ()
 
 
@@ -344,7 +345,15 @@ def parse_submission(text: str, catalog: Catalog) -> IntakeResult:
     if nationality:
         lines.append(f'Nacionalidad: {nationality}')
     lines += [f'Teléfono: {_mask(phone, 0, 3)}', f'Correo: {_mask_email(email)}']
-    return IntakeResult(True, fields=fields, warnings=warnings, summary='\n'.join(lines),
+    full_lines = lines[:5]
+    if fill_mode == 'copy':
+        full_lines.append('Datos: se copian de la web tras entrar')
+    else:
+        full_lines += [f'{document_type}: {number}', f'Nombre: {full_name}']
+    if nationality:
+        full_lines.append(f'Nacionalidad: {nationality}')
+    full_lines += [f'Teléfono: {phone}', f'Correo: {email}']
+    return IntakeResult(True, fields=fields, warnings=warnings, summary='\n'.join(lines), full_summary='\n'.join(full_lines),
                         identity=(number, procedure, province, access_mode))
 
 
@@ -374,7 +383,7 @@ def template_text() -> str:
         'Mayúsculas o minúsculas da igual: el bot pone NIE y nombre en MAYÚSCULAS sin tildes ni Ñ, '
         'y el correo en minúsculas. Teléfono solo dígitos (se ignoran espacios, guiones y +).\n'
         'Una línea por campo, con «CLAVE: valor».\n\n'
-        '🔒 El bot borra su mensaje tras leerlo (si Telegram lo permite) y solo responde con datos enmascarados.'
+        '🔒 El bot borra su mensaje tras leerlo (si Telegram lo permite) y responde con los datos guardados para que confirmes que son correctos.'
     )
 
 

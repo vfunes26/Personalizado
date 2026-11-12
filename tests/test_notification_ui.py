@@ -176,7 +176,7 @@ def test_recipient_test_targets_only_clicked_chat(owner,monkeypatch):
     tests=[b for b in panel.findChildren(QPushButton) if b.property('recipientId')=='2']
     assert len(tests)==1
     tests[0].click()
-    assert sent==['2']
+    assert sent==['2','2']  # prueba + plantilla
 
 
 def test_manual_mode_invalidates_found_choice_and_never_overlaps(owner,qt_app):

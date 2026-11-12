@@ -12,8 +12,14 @@ from .proxy_check import check_proxy
 from .proxy_profiles import ProxyProfileError
 
 MAX_WORKERS = 10
-MODE_TEXT = {'working': 'Trabajando', 'waiting': 'En espera', 'paused': 'Pausado',
-             'manual': 'REQUIERE INTERVENCION (CAPTCHA)', 'recovery': 'Recuperando', 'finished': 'Finalizado'}
+MODE_TEXT = {'working': 'Buscando', 'waiting': 'Esperando', 'paused': 'Pausado',
+             'manual': 'CAPTCHA / intervencion manual', 'recovery': 'Recuperando', 'finished': 'Finalizado',
+             'booking_handoff': 'CITA ENCONTRADA'}
+
+
+def short(text, limit=70):
+    text = ' '.join(str(text).split())
+    return text if len(text) <= limit else text[:limit - 1] + '…'
 
 
 class WorkerSlot(QObject):
@@ -34,6 +40,7 @@ class WorkerSlot(QObject):
         self.status, self.tone, self.manual = 'Detenido', 'muted', False
         self._last_key = None
         self._seen_fatal = set()
+        self.failed_text = ''
 
     @property
     def active(self):
@@ -56,29 +63,36 @@ class WorkerSlot(QObject):
         mode = state.get('mode')
         lost = bool(state.get('connection_lost'))
         text = 'Conexion con el trabajador perdida' if lost else MODE_TEXT.get(mode, 'Iniciando')
-        tone = 'danger' if lost or mode == 'recovery' else 'attention' if mode == 'manual' \
-            else 'accent' if mode in {'working', 'waiting'} else 'muted'
+        tone = 'danger' if lost or mode == 'recovery' else 'success' if mode == 'booking_handoff' \
+            else 'attention' if mode == 'manual' else 'accent' if mode in {'working', 'waiting'} else 'muted'
         was_manual = self.manual
         key = (state.get('screen', ''), state.get('evidence', ''))
         if key != self._last_key and any(key):
             self._last_key = key
             self.log(' — '.join(part for part in key if part))
+        if mode == 'booking_handoff' and self.status != text:
+            self.log('CITA ENCONTRADA: elige oficina y hora y confirma en la ventana de Camoufox de este trabajador.')
         if mode == 'manual' and not was_manual:
             self.log('El trabajador se detuvo y espera: resuelve el CAPTCHA/verificacion a mano. '
                      'Pulsa «Camoufox» en esta fila para traer su ventana al frente.')
         for row in state.get('journal', []):
             if row.get('event') == 'fatal_error' and row.get('id') not in self._seen_fatal:
                 self._seen_fatal.add(row.get('id'))
-                self.log('ERROR: ' + str(row.get('message') or row.get('detail') or 'el trabajador termino por un error'))
+                reason = str(row.get('message') or row.get('detail') or 'el trabajador termino por un error')
+                self.log('ERROR: ' + reason)
+                self.failed_text = 'Fallo: ' + short(reason, 55)
+        if self.failed_text:
+            text, tone = self.failed_text, 'danger'
         self.set_status(text, tone, mode == 'manual')
 
     def on_failed(self, message):
         self.log('ERROR: ' + str(message))
-        self.set_status('Error', 'danger')
+        self.failed_text = 'Fallo: ' + short(message, 55)
+        self.set_status(self.failed_text, 'danger')
 
     def on_finished(self, code):
         self.log('Trabajador detenido.' if not code else f'Trabajador terminado con error (codigo {code}).')
-        self.set_status('Detenido' if not code else 'Termino con error', 'muted' if not code else 'danger')
+        self.set_status('Detenido' if not code else f'Fallo: codigo {code}', 'muted' if not code else 'danger')
         self.finished.emit(self.index)
 
     def on_notification(self, channel, message):
@@ -165,7 +179,7 @@ class WorkerPool(QObject):
             else:
                 local_owner = row['index']
             slot.profile_id, slot.proxy_id, slot.proxy, slot.cancelled = profile_id, proxy_id, proxy, False
-            slot._last_key, slot._seen_fatal = None, set()
+            slot._last_key, slot._seen_fatal, slot.failed_text = None, set(), ''
             if proxy:
                 slot.set_status('Comprobando proxy', 'attention')
                 slot.log(f'Comprobando proxy «{proxy["label"]}» ({proxy["server"]})...')
@@ -197,7 +211,7 @@ class WorkerPool(QObject):
                 ok, detail = False, f'error inesperado: {exc}'
             label = slot.proxy['label'] if slot.proxy else ''
             if not ok:
-                slot.set_status('Proxy fallo', 'danger')
+                slot.set_status('Fallo: proxy no responde', 'danger')
                 slot.log(f'NO INICIADO: el proxy «{label}» fallo: {detail}. Este trabajador no sale con la IP local; '
                          'los demas trabajadores siguen su curso.')
                 continue
@@ -222,7 +236,7 @@ class WorkerPool(QObject):
                 except ProxyProfileError:
                     store.bind_request_profile(slot.profile_id, None, enabled=False)
         except ProxyProfileError as exc:
-            slot.set_status('Proxy fallo', 'danger')
+            slot.set_status('Fallo: proxy no disponible', 'danger')
             slot.log(f'NO INICIADO: {exc}. Este trabajador no sale con la IP local.')
             return
         if slot.controller is None:
