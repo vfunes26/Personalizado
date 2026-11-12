@@ -1,0 +1,114 @@
+name: Build personal packages (Windows portable + MSI + Linux)
+
+# Manual only: Actions -> "Build personal packages (Windows portable + MSI + Linux)" -> Run workflow.
+# Produces: Windows portable ZIP + Windows 64-bit MSI installer + Linux 64-bit AppImage.
+# No macOS, tags, releases or attestations.
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_tests:
+        description: Run the full test suite before packaging (recommended)
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: personal-packages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2022
+            platform: windows
+            bundle: data/dist/Cita Extranjeria Helper
+          - runner: ubuntu-22.04
+            platform: linux
+            bundle: data/dist/Cita Extranjeria Helper
+    defaults:
+      run:
+        shell: bash
+    env:
+      QT_QPA_PLATFORM: offscreen
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: '3.13'
+      - name: Install dependencies
+        run: uv sync --frozen --extra desktop --extra build
+      - name: Install Linux native libraries
+        if: runner.os == 'Linux'
+        run: |
+          uv run python -m playwright install-deps firefox
+          sudo apt-get update
+          sudo apt-get install -y libgl1 libegl1 libxcb-cursor0 libxkbcommon-x11-0 libpulse0 libxcb-keysyms1 libxcb-icccm4 desktop-file-utils zsync
+      - name: Check release metadata
+        run: uv run python scripts/preflight.py --metadata-only
+      - name: Check source privacy
+        run: uv run python scripts/check_privacy.py --tree .
+      - name: Test
+        if: inputs.run_tests
+        timeout-minutes: 20
+        run: uv run pytest -v -s -o addopts= --tb=short -o faulthandler_timeout=120
+      - name: Fetch public browser (Camoufox)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          uv run python -m camoufox fetch
+          uv run python -c "from camoufox.pkgman import launch_path; print(launch_path())"
+      - name: Build native application
+        run: uv run python scripts/build_desktop_app.py
+      - name: Offline packaged browser and worker IPC
+        run: uv run python scripts/verify_bundle.py '${{ matrix.bundle }}'
+      - name: Verify preinstalled .NET build tools
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $sdks = dotnet --list-sdks
+          if ($LASTEXITCODE -ne 0 -or -not ($sdks -match '^8\.0\.\d+\s')) {
+            throw 'Windows runner must provide a .NET 8 SDK'
+          }
+          $runtimes = dotnet --list-runtimes
+          if ($LASTEXITCODE -ne 0 -or -not ($runtimes -match '^Microsoft\.NETCore\.App 8\.0\.\d+\s')) {
+            throw 'Windows runner must provide a .NET 8 runtime'
+          }
+          dotnet --info
+          if ($LASTEXITCODE -ne 0) { throw 'dotnet diagnostics failed' }
+      - name: Install MSI build tools
+        if: runner.os == 'Windows'
+        env:
+          DOTNET_ROLL_FORWARD: Major
+        run: dotnet tool install --global wix --version 4.0.6
+      - name: Prepare AppImage tool
+        if: runner.os == 'Linux'
+        run: uv run python scripts/prepare_appimage.py data/build-appimage-tools
+      - name: Package installer (MSI on Windows, AppImage on Linux)
+        env:
+          DOTNET_ROLL_FORWARD: Major
+        run: uv run python scripts/package_release.py --platform '${{ matrix.platform }}' --arch x64
+      - name: Verify final AppImage
+        if: runner.os == 'Linux'
+        run: |
+          for image in data/releases/*.AppImage; do
+            uv run python scripts/verify_appimage.py "$image"
+          done
+      - name: Package Windows portable ZIP
+        if: runner.os == 'Windows'
+        run: uv run python scripts/package_release.py --platform windows --arch x64 --portable
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: personal-${{ matrix.platform }}
+          path: data/releases/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
