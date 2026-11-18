@@ -75,3 +75,26 @@ def qt_app():
     yield app
     app.closeAllWindows()
     app.processEvents()
+
+
+@pytest.fixture
+def fake_native_proxy_vault(monkeypatch):
+    """In-memory OS keyring for proxy tests; production never uses a file fallback."""
+    from app.desktop.proxy_profiles import ProxyCredentialVault
+
+    class MemoryBackend:
+        def __init__(self):
+            self.secrets = {}
+
+        def set_password(self, service, account, password):
+            self.secrets[(service, account)] = password
+
+        def get_password(self, service, account):
+            return self.secrets.get((service, account))
+
+        def delete_password(self, service, account):
+            self.secrets.pop((service, account), None)
+
+    backend = MemoryBackend()
+    monkeypatch.setattr(ProxyCredentialVault, "backend", lambda self: backend)
+    return backend

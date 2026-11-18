@@ -1486,7 +1486,7 @@ def test_viewing_stopped_budget_consumes_next_day_estimate_once(window, task_map
 
 
 def test_proxy_is_saved_separately_and_reloaded_per_request_profile(
-    window, monkeypatch, tmp_path
+    window, monkeypatch, tmp_path, fake_native_proxy_vault
 ):
     monkeypatch.setattr(
         'app.desktop.window.runtime_root',

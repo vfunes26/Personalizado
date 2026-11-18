@@ -845,7 +845,7 @@ def test_site_helpers_propagate_fresh_pass_restart(method):
     assert error.value is restart
     page.wait_for_timeout.assert_not_awaited()
 
-def test_camoufox_receives_only_the_assigned_active_proxy(monkeypatch, tmp_path):
+def test_camoufox_receives_only_the_assigned_active_proxy(monkeypatch, tmp_path, fake_native_proxy_vault):
     from app.desktop.proxy_profiles import ProxyProfileStore
 
     monkeypatch.setattr('app.site.runtime_root', lambda: tmp_path)
