@@ -9,6 +9,7 @@ import ssl
 import tempfile
 
 from .notification_store import NotificationVault
+from ..notifications import NotificationError
 
 SMTP_HOST = 'smtp.gmail.com'
 SMTP_PORT = 465
@@ -16,7 +17,7 @@ ADDRESS = re.compile(r"^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-
 MAX_RECIPIENTS = 10
 
 
-class GmailError(ValueError):
+class GmailError(NotificationError):
     """Safe diagnostic: never forward SMTP exceptions or credentials."""
 
 
@@ -85,6 +86,10 @@ class GmailSettings:
             raise GmailError('Introduce la contraseña de aplicación para configurar Gmail.')
         data = {'sender': sender, 'recipients': addresses, 'secret_ref': ref}
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        if self.path.is_symlink() or any(p.is_symlink() for p in self.path.parents):
+            if created:
+                self.vault.delete(created)
+            raise GmailError('La ruta de configuración no está permitida.')
         fd, temp = tempfile.mkstemp(prefix='.gmail-settings-', dir=self.path.parent)
         try:
             with os.fdopen(fd, 'w', encoding='utf-8') as stream:
