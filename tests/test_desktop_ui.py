@@ -1536,3 +1536,27 @@ def test_proxy_is_saved_separately_and_reloaded_per_request_profile(
     assert window.proxy_selector.currentData() == proxy_id
     assert window.proxy_toggle.isChecked()
     assert window.proxy_server_input.text() == 'http://127.0.0.1:8080'
+
+
+def test_office_selector_uses_exact_available_snapshot(window):
+    from app.config import _load_catalog
+    window.create_profile()
+    window.fields['province'].setCurrentText('Barcelona')
+    offices=_load_catalog(window.store.catalog_path)['barcelona_offices']
+    field=window.fields['office']
+    assert all(field.findText(name)>=0 for name in offices)
+    assert field.itemData(0)==''
+    window.fields['province'].setCurrentText('Alicante')
+    assert field.count()==1 and field.currentData()==''
+    window.profile_editor.close()
+
+
+def test_settings_expose_manual_release_check(window,monkeypatch):
+    from PySide6.QtWidgets import QPushButton
+    button=window.findChild(QPushButton,'manualUpdateCheck')
+    assert button is not None
+    events=[]
+    monkeypatch.setattr(window,'check_updates',lambda:events.append('manual'))
+    window.preferences['automatic_updates']=False
+    button.click()
+    assert events==['manual']

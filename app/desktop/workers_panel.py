@@ -195,6 +195,7 @@ class WorkersPanel(QWidget):
         row['status'].setText('⚠' if partial else '✔' if ok else '✖')
         row['status'].setStyleSheet(PROBE_WAIT if partial else PROBE_OK if ok else PROBE_BAD)
         row['status'].setToolTip(detail)
+        row['probe'].setToolTip(detail)
         name = row['label'].text().strip() or f'Proxy {self.proxy_rows.index(row) + 1}'
         label = 'PARCIAL' if partial else 'OK' if ok else 'FALLO'
         self.append_log(None, f'Prueba de proxy «{name}»: {label} — {detail}')
@@ -218,8 +219,13 @@ class WorkersPanel(QWidget):
             self.probe_timer.stop()
             results = [row['status'].text() for row in self.proxy_rows if row['status'].text() in {'✔', '✖', '⚠'}]
             if results:
-                self.proxy_note.setText(f'Resultado: {results.count("✔")} verificado(s), '
-                                        f'{results.count("⚠")} parcial(es), {results.count("✖")} con fallo.')
+                summary=f'Resultado: {results.count("✔")} verificado(s), {results.count("⚠")} parcial(es), {results.count("✖")} con fallo.'
+                errors=[(row['label'].text() or str(i+1),row['status'].toolTip())
+                        for i,row in enumerate(self.proxy_rows) if row['status'].text()=='✖']
+                if errors:
+                    summary+=f' Primer error ({errors[0][0]}): {errors[0][1]}'
+                self.proxy_note.setText(summary)
+                self.proxy_note.setToolTip('\n'.join(f'{name}: {reason}' for name,reason in errors))
 
     def save_proxies(self):
         store = self.main_window._proxy_store()

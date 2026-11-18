@@ -438,7 +438,7 @@ class DesktopWindow(QMainWindow):
         self.fields={};self.profile_grid=grid
         self._document_drafts={};self._document_kind='NIE';self._regreso_document_type='NIE'
         self._editor_procedure=TIE_PROCEDURE;self._identity_layout_service=None
-        fields=[('label','Название профиля'),('province','Провинция'),('procedure','Услуга'),('access_mode','Способ авторизации'),
+        fields=[('label','Название профиля'),('province','Провинция'),('procedure','Услуга'),('access_mode','Способ авторизации'),('office','Oficina de cita'),
                 ('fill_mode','NIE и имя'),('document_type','Документ'),('document_number','NIE'),('full_name','Имя и фамилия'),
                 ('nationality','Гражданство'),('phone','Телефон'),('email','Почта'),
                 ('delay_min','Задержка действий: минимум, с'),
@@ -446,14 +446,14 @@ class DesktopWindow(QMainWindow):
         countries=sorted(_load_catalog(self.store.catalog_path)['nationalities'])
         positions={'label':(0,0,1),'province':(0,1,1),'procedure':(1,0,1),'access_mode':(1,1,1),
                    'fill_mode':(2,0,2),'document_type':(3,0,1),'document_number':(3,1,1),'full_name':(4,0,2),
-                   'nationality':(6,0,2),'phone':(5,0,1),'email':(5,1,1),
+                   'nationality':(6,0,2),'phone':(5,0,1),'email':(5,1,1),'office':(7,0,2),
                    'delay_min':(7,0,1),'delay_max':(7,1,1)}
         grid.setColumnStretch(0,1);grid.setColumnStretch(1,1)
         self.profile_field_boxes={}
         self.identity_buttons={}
         identity_group=QButtonGroup(self.profile_editor);identity_group.setExclusive(True)
         for index,(key,title) in enumerate(fields):
-            if key in {'access_mode','fill_mode','nationality','province','procedure','document_type'}:
+            if key in {'access_mode','fill_mode','nationality','province','procedure','document_type','office'}:
                 widget=ProfileComboBox()
                 if key=='access_mode':
                     widget.addItem('Электронный сертификат','certificate'); widget.addItem('Cl@ve Móvil','clave_movil'); widget.addItem('Cl@ve Permanente','clave_permanente'); widget.addItem('Без Cl@ve','without_clave')
@@ -462,6 +462,7 @@ class DesktopWindow(QMainWindow):
                 elif key=='nationality':
                     widget.addItems(countries); widget.setPlaceholderText('Selecciona la nacionalidad')
                 elif key=='province': widget.addItems(sorted(_load_catalog(self.store.catalog_path)['provinces']))
+                elif key=='office': widget.addItem('Cualquier oficina','')
                 elif key=='document_type':
                     for text,value in [('NIE','NIE'),('DNI','DNI'),('Паспорт','PASSPORT')]:widget.addItem(text,value)
                 else:
@@ -492,6 +493,7 @@ class DesktopWindow(QMainWindow):
         self.document_fields_layout.setContentsMargins(0,0,0,0);self.document_fields_layout.setSpacing(12)
         self.profile_field_boxes['document_type'].setFixedWidth(160)
         self.profile_focus_fields=[self.fields[key] for key in ('label','province','procedure','access_mode')]+[self.identity_buttons['copy'],self.identity_buttons['manual']]+[self.fields[key] for key in ('document_type','document_number','full_name','nationality','phone','email')]
+        self.fields['province'].currentIndexChanged.connect(self.refresh_office_choices)
         self.fields['procedure'].currentIndexChanged.connect(self.update_profile_document)
         self.fields['document_type'].currentIndexChanged.connect(self.update_profile_document)
         self.fields['access_mode'].currentIndexChanged.connect(self.update_identity_fields)
@@ -667,6 +669,14 @@ class DesktopWindow(QMainWindow):
                                'Los tokens del almacén de Windows no se transfieren.',muted=True))
         layout.addWidget(label('Обновления',name='sectionHeading'))
         self.updates_toggle=self.toggle_row(layout,'Автоматически проверять обновления','Проверять GitHub Releases при запуске и раз в сутки. Скачивание и установка — по кнопке.',key='updates')
+        update_row=QHBoxLayout()
+        self.manual_update_button=QPushButton('Comprobar actualizaciones ahora')
+        self.manual_update_button.setObjectName('manualUpdateCheck')
+        self.manual_update_button.clicked.connect(self.check_updates)
+        update_row.addWidget(self.manual_update_button)
+        self.manual_update_status=label('Consulta GitHub Releases cuando quieras; instalar requiere confirmación.',muted=True)
+        update_row.addWidget(self.manual_update_status,1)
+        layout.addLayout(update_row)
         layout.addWidget(label('Gmail — correo SMTP seguro',name='sectionHeading'))
         from .gmail_panel import GmailPanel
         self.gmail_panel=GmailPanel(self.store.path.parent/'data'/'gmail-settings.json',self)
@@ -829,6 +839,31 @@ class DesktopWindow(QMainWindow):
             button.setFocusPolicy(Qt.FocusPolicy.StrongFocus if selected else Qt.FocusPolicy.ClickFocus)
         for previous,current in zip(self.profile_focus_fields,self.profile_focus_fields[1:]):
             QWidget.setTabOrder(previous,current)
+
+    def refresh_office_choices(self, *_args, selected=None):
+        """Exact local labels, without inventing offices absent from the snapshot."""
+        import json
+        choice=self.fields['office']
+        province=self.fields['province'].currentText()
+        previous=choice.currentData() if selected is None else selected
+        names=[]
+        if province=='Barcelona':
+            try:
+                snapshot=json.loads(Path(self.store.catalog_path).read_text(encoding='utf-8'))
+                names=[item['label'] for item in snapshot['selectors']['barcelona_offices']['options']]
+            except (OSError,ValueError,TypeError,KeyError):
+                names=[]
+        choice.blockSignals(True)
+        choice.clear()
+        choice.addItem('Cualquier oficina','')
+        for name in names:
+            if name!='Cualquier oficina':
+                choice.addItem(name,name)
+        if previous and choice.findData(previous)<0:
+            choice.addItem(previous+' (preferencia antigua; no verificada)',previous)
+        choice.setCurrentIndex(max(0,choice.findData(previous or '')))
+        choice.blockSignals(False)
+        choice.setToolTip('Catálogo de oficinas verificable solo para Barcelona; otras provincias: Cualquier oficina.')
 
     def create_profile(self):
         if len(getattr(self, 'profiles', [])) >= 10:
@@ -1402,6 +1437,7 @@ class DesktopWindow(QMainWindow):
         self.fields['nationality'].setCurrentIndex(-1)
         self.fields['nationality'].setCurrentText(applicant.get('nationality',''))
         self.fields['province'].setCurrentText(raw.get('request',{}).get('province','Barcelona'))
+        self.refresh_office_choices(selected=raw.get('request',{}).get('office',''))
         access=raw.get('request',{}).get('access_mode','certificate')
         if access=='clave':
             access='clave_'+raw.get('request',{}).get('clave_method','movil')
@@ -1445,7 +1481,7 @@ class DesktopWindow(QMainWindow):
         access_mode='clave' if selected_auth.startswith('clave_') else selected_auth
         clave_method=selected_auth.removeprefix('clave_') if access_mode=='clave' else 'movil'
         data=dict(label=f['label'].text().strip(),timings=timings,request=dict(access_mode=access_mode,clave_method=clave_method,no_slots_mode=self.no_slots_mode_combo.currentData(),applicant_no_slots_mode=self.applicant_no_slots_combo.currentData(),
-            province=f['province'].currentText(),procedure=f['procedure'].currentData(),subprocedure=None),
+            province=f['province'].currentText(),office=f['office'].currentData() or '',procedure=f['procedure'].currentData(),subprocedure=None),
             applicant=dict(fill_mode='manual' if access_mode=='without_clave' else f['fill_mode'].currentData(),document_type=f['document_type'].currentData() if f['procedure'].currentData()==REGRESO_PROCEDURE else 'NIE',document_number=f['document_number'].text(),
                 full_name=f['full_name'].text(),nationality=f['nationality'].currentText(),
                 contact=dict(phone=f['phone'].text(),email=f['email'].text())))
@@ -2124,6 +2160,8 @@ class DesktopWindow(QMainWindow):
             self.update_message='Проверяем обновления…';self.render_updates()
 
     def update_checked(self, release):
+        if hasattr(self, 'manual_update_status'):
+            self.manual_update_status.setText(('Versión nueva: '+release.version) if release else 'No hay una versión nueva publicada.')
         if self.update_path and (release is None or self.update_path.name!=release.name):
             self.update_path=None
         self.update_release=release
@@ -2140,6 +2178,8 @@ class DesktopWindow(QMainWindow):
         self.update_path=path;self.update_message='Обновление скачано и проверено';self.render_updates()
 
     def update_failed(self,reason):
+        if hasattr(self,'manual_update_status'):
+            self.manual_update_status.setText('Error al comprobar actualizaciones; vuelve a intentarlo.')
         self.update_install_requested=False
         if reason=='provenance':self.update_path=None
         self.update_message={'provenance':'Не удалось подтвердить происхождение обновления. Установка заблокирована.',
@@ -2153,6 +2193,8 @@ class DesktopWindow(QMainWindow):
         self.update_message=self.t('Скачивание обновления')+f': {percent}%';self.render_updates()
 
     def update_busy(self,busy):
+        if hasattr(self,'manual_update_button'):
+            self.manual_update_button.setEnabled(not busy)
         self.render_updates()
         if not busy and self.closing:self.close()
 
