@@ -10,9 +10,9 @@ function Avisar([string]$mensaje) { Write-Host ('[CitaHelper] ' + $mensaje) }
 
 function EliminarSeguro([string]$ruta, [string]$root) {
     if (-not (Test-Path -LiteralPath $ruta)) { return }
-    $real = [IO.Path]::GetFullPath($ruta).TrimEnd('\\')
-    $base = [IO.Path]::GetFullPath($root).TrimEnd('\\')
-    if (-not $real.StartsWith($base + '\\', [StringComparison]::OrdinalIgnoreCase)) {
+    $real = [IO.Path]::GetFullPath($ruta).TrimEnd('\')
+    $base = [IO.Path]::GetFullPath($root).TrimEnd('\')
+    if (-not $real.StartsWith($base + '\', [StringComparison]::OrdinalIgnoreCase)) {
         throw ('Fuera del directorio permitido: ' + $ruta)
     }
     $cursor = $real
@@ -37,10 +37,10 @@ function EliminarSeguro([string]$ruta, [string]$root) {
 try {
     if (-not $env:SystemDrive) { throw 'No se puede localizar el disco del sistema.' }
     $root = Join-Path $env:SystemDrive 'CitaHelper'
-    $portable = Join-Path $root 'Compilaciones\\Cita Extranjeria Helper - Personalizado'
+    $portable = Join-Path $root 'Compilaciones\Cita Extranjeria Helper - Personalizado'
     foreach ($required in @('Cita Extranjeria Helper.exe','portable.flag',
-        '_internal\\bundled-browser\\camoufox.exe',
-        '_internal\\fpgen\\data\\fingerprint-network.json.zst')) {
+        '_internal\bundled-browser\camoufox.exe',
+        '_internal\fpgen\data\fingerprint-network.json.zst')) {
         if (-not (Test-Path -LiteralPath (Join-Path $portable $required) -PathType Leaf)) {
             throw ('No se limpia: portable incompleto o ausente. Falta: ' + $required)
         }
@@ -67,7 +67,7 @@ try {
     }
     foreach ($folder in @(Get-ChildItem -LiteralPath $compilaciones -Directory |
                            Where-Object { $_.Name -like '.preparando-*' })) {
-        $private = Join-Path $folder.FullName 'Cita Extranjeria Helper\\data'
+        $private = Join-Path $folder.FullName 'Cita Extranjeria Helper\data'
         if ((Test-Path -LiteralPath $private -PathType Container) -and
             @(Get-ChildItem -LiteralPath $private -Recurse -Force).Count -gt 0) {
             Avisar ('Temporal con datos privados: se conserva ' + $folder.Name)
@@ -77,7 +77,7 @@ try {
     if (Test-Path -LiteralPath $stages -PathType Container) {
         foreach ($folder in @(Get-ChildItem -LiteralPath $stages -Directory)) {
             if ($folder.Name -match '^(?:[a-f0-9]{12}|b[a-f0-9]{8})$') {
-                $private = Join-Path $folder.FullName 'src\\tasks.yml'
+                $private = Join-Path $folder.FullName 'src\tasks.yml'
                 if (Test-Path -LiteralPath $private) {
                     Avisar ('Temporal con perfiles privados: se conserva ' + $folder.Name)
                 } else { EliminarSeguro $folder.FullName $root }
@@ -102,7 +102,7 @@ try {
             $private = Test-Path -LiteralPath (Join-Path $folder.FullName 'tasks.yml')
             $data = Test-Path -LiteralPath (Join-Path $folder.FullName 'data')
             $git = Test-Path -LiteralPath (Join-Path $folder.FullName '.git')
-            $source = Test-Path -LiteralPath (Join-Path $folder.FullName 'scripts\\build_desktop_app.py')
+            $source = Test-Path -LiteralPath (Join-Path $folder.FullName 'scripts\build_desktop_app.py')
             if ($source -and -not ($venv -or $private -or $data -or $git)) {
                 EliminarSeguro $folder.FullName $root
             } else {
