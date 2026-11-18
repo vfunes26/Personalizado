@@ -54,7 +54,8 @@ def _atomic_write(path, data):
         raise BackupError('Ruta de almacenamiento no permitida.')
     fd, temp = tempfile.mkstemp(prefix='.ceh-restore-', dir=path.parent)
     try:
-        os.fchmod(fd, 0o600)
+        if hasattr(os, 'fchmod'):
+            os.fchmod(fd, 0o600)
         with os.fdopen(fd, 'wb') as stream:
             stream.write(data)
             stream.flush()
@@ -223,6 +224,13 @@ def restore_backup(root, source, password, *, allow_replace=False):
         folder = root / 'data' / 'backups'
         stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%f')
         export_backup(root, folder / ('antes-de-restaurar-' + stamp + '.cehbackup'), password)
+    # Existing SQLite WAL files may replay stale transactions over a newly
+    # restored database. Refuse rather than corrupting a running installation.
+    for name in records:
+        if name in DATABASES:
+            path = targets[name]
+            if any(Path(str(path) + suffix).exists() for suffix in ('-wal', '-shm')):
+                raise BackupError('Cierra la aplicación y consolida las bases SQLite antes de restaurar.')
     original = {name: path.read_bytes() if path.exists() else None for name, path in targets.items()}
     changed = []
     try:
