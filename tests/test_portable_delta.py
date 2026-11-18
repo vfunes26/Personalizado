@@ -170,3 +170,26 @@ def test_only_manifest_is_needed_from_previous_release(tmp_path):
     assert patch.is_file()
     assert delta.delta_asset_name('extranjeria-cita-helper-0.3.6-windows-x64-portable.zip','0.3.5').endswith(
         'windows-x64-portable-from-0.3.5.delta.zip')
+
+
+def test_offline_release_builder_needs_only_small_previous_manifest(tmp_path):
+    from scripts.build_portable_delta import build
+    from scripts.attest_release import packages
+    old_zip = full_zip(tmp_path / 'old.zip', OLD)
+    old_manifest = tmp_path / 'previous.json'
+    old_manifest.write_text(json.dumps(delta.portable_manifest(old_zip, '0.3.5')))
+    old_zip.unlink()
+    new_name = 'extranjeria-cita-helper-0.3.6-windows-x64-portable.zip'
+    new_zip = full_zip(tmp_path / new_name, NEW)
+    manifest, patch = build(new_zip, '0.3.6', previous=('0.3.5', old_manifest))
+    assert manifest.name == 'portable-manifest-0.3.6.json'
+    assert patch is not None and patch.name.endswith('from-0.3.5.delta.zip')
+    assert patch.stat().st_size < new_zip.stat().st_size
+    assert manifest in packages(tmp_path)
+    assert patch in packages(tmp_path)
+    for path in (manifest, patch):
+        with path.open('rb') as stream:
+            digest = hashlib.file_digest(stream,'sha256').hexdigest()
+        assert path.with_name(path.name+'.sha256').read_text() == (
+            digest+'  '+path.name+'\n'
+        )
