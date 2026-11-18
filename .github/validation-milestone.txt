@@ -13,3 +13,5 @@ Revalidación final del BAT auto-instalable desde ZIP manual, controlador sin in
 Prueba final: LimpiarPortable.bat permite limpieza directa desde ZIP sin compilar, con confirmación y exclusiones.
 
 Revalidación final del PowerShell 5.1: separadores únicos en pruebas de rutas, fuente y limpiador.
+
+Verificación final de comillas de Windows en -Proyecto para carpeta ZIP con barra final.
