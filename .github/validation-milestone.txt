@@ -3,3 +3,5 @@ Ajustes: 13 y 14
 Tipo: Tests — pruebas unitarias y Qt offscreen
 Objetivo: descarga reanudable por HTTP Range, delta Windows firmado, hashes, carpeta independiente, datos privados
 Sin compilación Windows, etiquetas ni publicación de releases
+
+Revalidación integral tras corregir fixture MSI de la prueba de deltas y ampliar protección Windows
