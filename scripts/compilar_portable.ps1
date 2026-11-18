@@ -127,6 +127,15 @@ print('Camoufox, FPGen y dependencias: disponibles SIN descargar.')
 
     $builds = Join-Path $root 'Compilaciones'
     $ready = Join-Path $builds 'Cita Extranjeria Helper - Personalizado'
+    # Never follow a junction or symlink into the original portable.
+    foreach ($folder in @($root, $builds, $ready)) {
+        if (Test-Path -LiteralPath $folder) {
+            $item = Get-Item -LiteralPath $folder -Force
+            if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+                throw ('La ruta es un enlace, no una carpeta local segura: ' + $folder)
+            }
+        }
+    }
     $marker = Join-Path $ready 'codigo-commit.txt'
     if (-not $Recompilar -and (Test-Path -LiteralPath $marker -PathType Leaf) -and
             (Test-Path -LiteralPath (Join-Path $ready 'Cita Extranjeria Helper.exe') -PathType Leaf)) {
