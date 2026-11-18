@@ -274,3 +274,74 @@ def test_delete_telegram_needs_gmail_before_confirmation():
         assert 'Configura Gmail' in client.sent[-1][1]
         assert len(store.load()) == 2
         assert not any(method == 'sendMessage' for method, _ in client.calls)
+
+
+def test_delete_needs_fresh_list_after_restart():
+    with tempfile.TemporaryDirectory() as directory:
+        store, vault, client, inbox, clock = setup(directory)
+        inbox.deletion_service.mail = FakeMail()
+        client.updates = [message(1, '/borrar 1')]
+        inbox.poll_once()
+        assert '/perfiles' in client.sent[-1][1]
+        assert len(store.load()) == 1
+        assert not any(method == 'sendMessage' for method, _ in client.calls)
+
+
+def test_delete_refuses_expired_numbered_list():
+    with tempfile.TemporaryDirectory() as directory:
+        store, client, inbox, mail, clock = _created_for_deletion(directory)
+        clock[0] = 601.0
+        client.updates = [message(3, '/borrar 2')]
+        inbox.poll_once()
+        assert '/perfiles' in client.sent[-1][1]
+        assert len(store.load()) == 2
+        assert not mail.sent
+
+
+def test_delete_confirmation_expires_before_destructive_action():
+    with tempfile.TemporaryDirectory() as directory:
+        store, client, inbox, mail, clock = _created_for_deletion(directory)
+        client.updates = [message(3, '/borrar 2')]
+        inbox.poll_once()
+        request = next(data for method, data in reversed(client.calls) if method == 'sendMessage')
+        token = request['reply_markup']['inline_keyboard'][0][0]['callback_data']
+        message_id = 9000 + len(client.sent)
+        clock[0] = 181.0
+        client.updates = [callback(4, token, message_id=message_id)]
+        inbox.poll_once()
+        assert 'caducada' in client.sent[-1][1]
+        assert len(store.load()) == 2
+        assert not mail.sent
+
+
+def test_new_listing_invalidates_outstanding_delete_buttons():
+    with tempfile.TemporaryDirectory() as directory:
+        store, client, inbox, mail, _clock = _created_for_deletion(directory)
+        client.updates = [message(3, '/borrar 2')]
+        inbox.poll_once()
+        request = next(data for method, data in reversed(client.calls) if method == 'sendMessage')
+        token = request['reply_markup']['inline_keyboard'][0][0]['callback_data']
+        message_id = 9000 + len(client.sent)
+        client.updates = [message(4, '/perfiles')]
+        inbox.poll_once()
+        client.updates = [callback(5, token, message_id=message_id)]
+        inbox.poll_once()
+        assert 'inválida o caducada' in client.sent[-1][1]
+        assert len(store.load()) == 2
+        assert not mail.sent
+
+
+def test_confirmation_cannot_be_replayed_to_delete_twice():
+    with tempfile.TemporaryDirectory() as directory:
+        store, client, inbox, mail, _clock = _created_for_deletion(directory)
+        client.updates = [message(3, '/borrar 2')]
+        inbox.poll_once()
+        request = next(data for method, data in reversed(client.calls) if method == 'sendMessage')
+        token = request['reply_markup']['inline_keyboard'][0][0]['callback_data']
+        message_id = 9000 + len(client.sent)
+        client.updates = [callback(4, token, message_id=message_id)]
+        inbox.poll_once()
+        assert len(store.load()) == 1 and len(mail.sent) == 1
+        client.updates = [callback(5, token, message_id=message_id)]
+        inbox.poll_once()
+        assert len(store.load()) == 1 and len(mail.sent) == 1
