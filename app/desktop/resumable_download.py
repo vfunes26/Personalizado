@@ -198,11 +198,11 @@ def fetch_package(release, directory, checksum, cancel, *, fetch, progress=lambd
                 if actual == checksum:
                     progress(100)
                     return part
+                # A freshly downloaded, full-size file with the wrong hash
+                # is corrupted. Do not download another full copy on metered
+                # connections; an explicit later attempt may retry.
                 _remove(part, meta)
-                if attempt == MAX_ATTEMPTS - 1:
-                    raise ValueError('Downloaded package checksum mismatch')
-                record = dict(expected)
-                continue
+                raise ValueError('Downloaded package checksum mismatch')
             if reached_end:
                 # Some servers choose a shorter 206 range; request the remainder.
                 continue
