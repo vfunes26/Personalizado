@@ -154,7 +154,7 @@ def download_release(release,directory,cancel,*,fetch=fetch,progress=lambda valu
     if cancel.is_set():raise InterruptedError('Download cancelled')
     destination.with_name(destination.name+'.provenance.json').write_text(json.dumps(receipt),encoding='utf-8')
     os.replace(partial,destination)
-    destination.with_name(destination.name+'.sha256').write_text(digest+'  '+destination.name+'\\n')
+    destination.with_name(destination.name+'.sha256').write_text(digest+'  '+destination.name+'\n')
     directory.joinpath(release.name+'.part.json').unlink(missing_ok=True)
     return destination
 
