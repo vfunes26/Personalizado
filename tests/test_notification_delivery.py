@@ -307,3 +307,20 @@ def test_queued_office_alert_survives_interruption_but_not_a_new_document(qt_app
         assert len(sent) == 2
     finally:
         delivery.stop()
+
+
+
+def test_restart_keeps_telegram_restriction_cooldown_for_same_profile(qt_app):
+    from app.desktop.notification_delivery import NotificationDelivery
+    delivery = NotificationDelivery(object())
+    delivery.profile_id = 'profile-one'
+    delivery.router.sent['restriction'] = 1234.0
+    delivery.telegram_router.sent['restriction'] = 1250.0
+    delivery.reset()
+    assert delivery.router.sent['restriction'] == 1234.0
+    assert delivery.telegram_router.sent['restriction'] == 1250.0
+    # A different profile must never inherit this applicant's cooldown.
+    delivery.router = n.EventRouter()
+    delivery.telegram_router = n.EventRouter()
+    assert delivery.telegram_router.sent == {}
+    delivery.stop()
