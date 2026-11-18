@@ -3,7 +3,7 @@ import json
 import re
 from functools import lru_cache
 
-REPOSITORY = 'https://github.com/itwormz/extranjeria-cita-helper'
+REPOSITORY = 'https://github.com/vfunes26/Personalizado'
 WORKFLOW = '.github/workflows/build.yml'
 MAX_BUNDLE = 2 * 1024 * 1024
 
