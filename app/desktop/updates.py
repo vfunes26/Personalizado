@@ -93,7 +93,7 @@ def select_release(data,current,target,arch,*,portable=False):
         raise ValueError('Invalid package size')
     delta = None
     # A patch is optional. The full, signed portable ZIP remains the fallback.
-    if portable and re.fullmatch(r'[0-9]+\\.[0-9]+\\.[0-9]+', current):
+    if portable and re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', current):
         patch_name = delta_asset_name(name, current)
         patch_items = [a for a in data.get('assets', []) if a.get('name') == patch_name]
         proof_items = [a for a in data.get('assets', []) if a.get('name') == patch_name+'.sigstore.json']
@@ -270,8 +270,8 @@ class UpdateService(QObject):
     @staticmethod
     def _delta_target_version(path):
         match = re.fullmatch(
-            r'(?:extranjeria-cita-helper|SantaCita)-([0-9]+\\.[0-9]+\\.[0-9]+)-'
-            r'windows-x64-portable-from-[0-9]+\\.[0-9]+\\.[0-9]+\\.delta\\.zip',
+            r'(?:extranjeria-cita-helper|SantaCita)-([0-9]+\.[0-9]+\.[0-9]+)-'
+            r'windows-x64-portable-from-[0-9]+\.[0-9]+\.[0-9]+\.delta\.zip',
             Path(path).name)
         if not match: raise ValueError('Nombre de diferencial no reconocido')
         return match.group(1)
