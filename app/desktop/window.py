@@ -423,6 +423,10 @@ class DesktopWindow(QMainWindow):
         toolbar.addWidget(self.settings_profile_combo)
         edit=QPushButton('Редактировать');edit.setObjectName('editProfile');edit.clicked.connect(self.edit_profile);toolbar.addWidget(edit)
         create=QPushButton('Создать профиль');create.setObjectName('createProfile');create.clicked.connect(self.create_profile);toolbar.addWidget(create)
+        remove=QPushButton('Eliminar perfil')
+        remove.setObjectName('deleteProfile')
+        remove.clicked.connect(self.delete_selected_profile)
+        toolbar.addWidget(remove)
         toolbar.addStretch();layout.addLayout(toolbar)
         self.profile_summary=label('',muted=True);layout.addWidget(self.profile_summary)
         self.profiles_empty=label('Профилей пока нет. Создать профиль с данными заявителя и способом авторизации.',muted=True)
@@ -836,9 +840,75 @@ class DesktopWindow(QMainWindow):
         profile_id=self.settings_profile_combo.currentData()
         if profile_id: self.open_editor(profile_id)
 
+    def delete_selected_profile(self):
+        from .profile_deletion import ProfileDeletionService
+        from .notification_jobs import NotificationJobs
+        from .notification_store import NotificationVault
+        profile_id = self.settings_profile_combo.currentData()
+        if not profile_id:
+            return
+        task = next((t for t in self.profiles if t.id == profile_id), None)
+        if task is None:
+            QMessageBox.warning(self, 'Eliminar perfil', 'Actualiza la lista de perfiles.')
+            return
+        pool = self.workers_panel.pool
+        active = (self.controller.active and self.controller.profile_id == profile_id) or any(
+            slot.active and slot.profile_id == profile_id for slot in pool.slots.values()
+        )
+        if active:
+            QMessageBox.warning(self, 'Eliminar perfil', 'Detén el trabajador de este perfil antes de eliminarlo.')
+            return
+        thread = getattr(self, 'inbox_thread', None)
+        source = getattr(getattr(thread, 'inbox', None), 'source', None)
+        protected = getattr(source, 'profile_id', None)
+        if profile_id == protected:
+            QMessageBox.warning(self, 'Eliminar perfil',
+                                'Este perfil mantiene conectado Telegram. Desactiva el buzón antes de eliminarlo.')
+            return
+        choice = QMessageBox.question(
+            self, 'Confirmar eliminación',
+            f'¿Eliminar el perfil «{task.label}»?\n\n'
+            'Se eliminará de la lista y se enviará un comprobante por Gmail. '
+            'La eliminación quedará registrada en la auditoría local.',
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if choice != QMessageBox.StandardButton.Yes:
+            return
+        if not hasattr(self, 'profile_delete_jobs'):
+            self.profile_delete_jobs = NotificationJobs(self)
+        button = self.findChild(QPushButton, 'deleteProfile')
+        button.setEnabled(False)
+        service = ProfileDeletionService(self.store, vault=NotificationVault())
+        revision = self.store.revision()
+        self.profile_delete_jobs.submit(
+            lambda: service.delete(profile_id, revision=revision, origin='interfaz',
+                                   protected_profile_id=protected),
+            lambda ok, result: self._finish_profile_deletion(ok, result),
+        )
+
+    def _finish_profile_deletion(self, ok, result):
+        button = self.findChild(QPushButton, 'deleteProfile')
+        button.setEnabled(True)
+        if not ok:
+            QMessageBox.warning(self, 'Eliminar perfil', str(result))
+            return
+        self.refresh_profiles()
+        self.workers_panel.refresh_combos()
+        self.workers_panel.save_config()
+        if result['emailed']:
+            message = 'Perfil eliminado y comprobante Gmail enviado.'
+        else:
+            message = 'Perfil eliminado. El correo falló; revisa la auditoría local.'
+        if result['warnings']:
+            message += ' Algunas asignaciones necesitan revisión.'
+        self.statusBar().showMessage(message, 10000)
+        QMessageBox.information(self, 'Eliminar perfil', message)
+
     def update_profile_summary(self, *_):
         profile_id=self.settings_profile_combo.currentData()
         self.findChild(QPushButton,'editProfile').setEnabled(bool(profile_id))
+        self.findChild(QPushButton,'deleteProfile').setEnabled(bool(profile_id))
         if not profile_id:
             self.profile_summary.clear()
             return
