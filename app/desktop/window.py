@@ -2111,7 +2111,11 @@ class DesktopWindow(QMainWindow):
         if self.update_path and (release is None or self.update_path.name!=release.name):
             self.update_path=None
         self.update_release=release
-        self.update_message=('Доступна новая версия' if release else 'Установлена актуальная версия')
+        self.update_message=(
+            'Disponible actualización diferencial: solo archivos modificados.'
+            if release and getattr(release, 'delta', None) else
+            ('Доступна новая версия' if release else 'Установлена актуальная версия')
+        )
         if release:
             self.footer.setText(self.t('Доступна новая версия')+': '+release.version+' — '+self.t('О приложении'))
         self.render_updates()
@@ -2179,7 +2183,12 @@ class DesktopWindow(QMainWindow):
         try:
             from .paths import portable_mode
             if portable_mode():
-                QDesktopServices.openUrl(QUrl.fromLocalFile(str(Path(path).parent)))
+                folder = Path(path) if Path(path).is_dir() else Path(path).parent
+                QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
+                if Path(path).is_dir():
+                    self.update_message = ('Portable verificado en carpeta independiente. '
+                                           'La versión anterior y sus perfiles permanecen intactos.')
+                    self.render_updates()
             elif sys.platform=='win32':
                 executable=Path(__import__('os').environ['SystemRoot'])/'System32/msiexec.exe'
                 subprocess.Popen([str(executable),'/i',str(path)])
