@@ -128,6 +128,47 @@ function ComprobarPortable([string]$bundle) {
     }
 }
 
+
+# El marcador de fuente por si solo no garantiza que el portable instalado
+# siga integro. Se guardan huellas de binarios y recursos esenciales.
+function ArchivosCriticosPortable() {
+    return @('Cita Extranjeria Helper.exe', 'portable.flag',
+             '_internal\bundled-browser\camoufox.exe',
+             '_internal\fpgen\data\fingerprint-network.json.zst')
+}
+
+function CrearHuellaPortable([string]$bundle) {
+    $lineas = foreach ($relativa in @(ArchivosCriticosPortable)) {
+        $archivo = Join-Path $bundle $relativa
+        if (-not (Test-Path -LiteralPath $archivo -PathType Leaf)) {
+            throw ('Falta archivo esencial: ' + $relativa)
+        }
+        $relativa + '|' + (Get-FileHash -LiteralPath $archivo -Algorithm SHA256).Hash
+    }
+    [IO.File]::WriteAllLines((Join-Path $bundle 'bundle-esencial.sha256'), [string[]]$lineas)
+}
+
+function VerificarHuellaPortable([string]$bundle) {
+    $manifest = Join-Path $bundle 'bundle-esencial.sha256'
+    if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) {
+        throw 'Esta compilacion no tiene huellas de integridad; debe renovarse.'
+    }
+    $registradas = @(Get-Content -LiteralPath $manifest)
+    $archivos = @(ArchivosCriticosPortable)
+    if ($registradas.Count -ne $archivos.Count) { throw 'El manifiesto de integridad es incompleto.' }
+    for ($index = 0; $index -lt $archivos.Count; $index++) {
+        $relativa = $archivos[$index]
+        $archivo = Join-Path $bundle $relativa
+        if (-not (Test-Path -LiteralPath $archivo -PathType Leaf)) {
+            throw ('Falta archivo esencial: ' + $relativa)
+        }
+        $esperada = $relativa + '|' + (Get-FileHash -LiteralPath $archivo -Algorithm SHA256).Hash
+        if ($registradas[$index] -cne $esperada) {
+            throw ('Integridad SHA-256 no coincide: ' + $relativa)
+        }
+    }
+}
+
 try {
     if (-not [Environment]::OSVersion.Platform.ToString().StartsWith('Win')) {
         throw 'El BAT solo puede compilar el portable en Windows.'
@@ -211,9 +252,22 @@ print('Camoufox, FPGen y dependencias: disponibles SIN descargar.')
     if (-not $Recompilar -and (Test-Path -LiteralPath $marker -PathType Leaf) -and
         (Test-Path -LiteralPath (Join-Path $ready 'Cita Extranjeria Helper.exe') -PathType Leaf) -and
         (Get-Content -LiteralPath $marker -Raw).Trim() -eq $sha) {
-        Avisar 'Esta fuente ya esta compilada. No se repite el trabajo.'
-        Remove-Item -LiteralPath $buildRoot -Recurse -Force
-        exit 0
+        $verificado = $false
+        try {
+            VerificarHuellaPortable $ready
+            # Prueba con datos temporales, nunca con perfiles del usuario.
+            EjecutarPython $python @((Join-Path $source 'scripts\verify_bundle.py'), $ready)
+            $verificado = $true
+        } catch {
+            Avisar ('La compilacion existente requiere reparacion: ' + $_.Exception.Message)
+        }
+        if ($verificado) {
+            Avisar 'Portable existente comprobado: SHA-256, GUI, navegador y trabajador IPC OK.'
+            Avisar 'Esta fuente ya esta compilada. No se repite el trabajo.'
+            Remove-Item -LiteralPath $buildRoot -Recurse -Force
+            exit 0
+        }
+        Avisar 'Se generara una nueva compilacion. Los datos actuales quedan protegidos.'
     }
     $versionLine = Select-String -LiteralPath (Join-Path $source 'app\version.py') -Pattern '^VERSION\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"' | Select-Object -First 1
     if ($null -eq $versionLine) { throw 'La version de codigo no es valida.' }
@@ -260,6 +314,7 @@ print('Camoufox, FPGen y dependencias: disponibles SIN descargar.')
     Expand-Archive -LiteralPath $zip -DestinationPath $candidateParent -ErrorAction Stop
     $candidate = Join-Path $candidateParent 'Cita Extranjeria Helper'
     ComprobarPortable $candidate
+    CrearHuellaPortable $candidate
     $digestLine = $sha + [Environment]::NewLine
     [IO.File]::WriteAllText((Join-Path $candidate 'codigo-fuente-local.sha256'), $digestLine)
 
