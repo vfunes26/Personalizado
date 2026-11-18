@@ -65,7 +65,9 @@ Solo después de comprobar que el nuevo ejecutable abre y funciona:
 
 - Haz doble clic en `LimpiarPortable.bat`, directamente desde la
   carpeta del ZIP manual si aún no has instalado el controlador actualizado.
-  Se instalará solo y **no ejecutará otra compilación**. O ejecuta
+  Se instalará solo y **no ejecutará otra compilación**. Si se lanza desde la
+  propia fuente ZIP, la limpieza continuará en una nueva consola para liberar
+  los archivos de esa carpeta antes de eliminarlos. O ejecuta
   `CompilarPortable.bat /limpiar` si el BAT ya está en `C:\\CitaHelper`.
 - El controlador comprobará el portable y pedirá escribir `LIMPIAR`.
 - Elimina `Compilaciones\\Paquetes`, `Compilaciones\\.preparando-*`,
