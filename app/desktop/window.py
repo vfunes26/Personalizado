@@ -682,7 +682,10 @@ class DesktopWindow(QMainWindow):
         self.gmail_panel=GmailPanel(self.store.path.parent/'data'/'gmail-settings.json',self)
         layout.addWidget(self.gmail_panel)
         layout.addWidget(label('Telegram',name='sectionHeading'))
-        self.telegram_toggle=self.toggle_row(layout,'Создавать профили из Telegram','Бот принимает шаблон от подключённых получателей и создаёт профиль. Работает, пока приложение открыто.',key='telegram_profiles')
+        self.telegram_toggle=self.toggle_row(layout,'Создавать профили из Telegram','Bot global y usuarios autorizados. Funciona mientras la aplicación esté abierta.',key='telegram_profiles')
+        from .telegram_global_ui import TelegramGlobalPanel
+        self.telegram_global_panel=TelegramGlobalPanel(self)
+        layout.addWidget(self.telegram_global_panel)
         self.telegram_status=label('',muted=True); self.telegram_status.setWordWrap(True); self.telegram_status.setVisible(False); layout.addWidget(self.telegram_status)
         layout.addWidget(label('Интерфейс',name='sectionHeading'))
         self.settings_language=ProfileComboBox()
