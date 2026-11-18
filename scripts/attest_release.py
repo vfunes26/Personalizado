@@ -12,7 +12,9 @@ from app.attestations import verify_attestation, MAX_BUNDLE
 
 
 def packages(directory):
-    return sorted(p for p in directory.iterdir() if p.suffix in {'.dmg', '.msi', '.AppImage', '.zip', '.zsync'})
+    return sorted(p for p in directory.iterdir() if
+                  p.suffix in {'.dmg', '.msi', '.AppImage', '.zip', '.zsync'} or
+                  (p.name.startswith('portable-manifest-') and p.suffix == '.json'))
 
 
 def attach(directory, bundle):
