@@ -243,3 +243,28 @@ Gracias por ayudar a difundir el proyecto:
 ## 📄 Licencia
 
 [PolyForm Noncommercial 1.0.0](LICENSE). Se permite el uso no comercial, la copia, la modificación y la distribución de la aplicación, conservando los términos de la licencia y el aviso de autoría. No se permite el uso comercial. Esta licencia se aplica al código de este proyecto; los componentes de terceros conservan sus propias licencias.
+
+
+## Compilación local del portable personalizado (Windows)
+
+Al finalizar los ajustes del proyecto, copia **`CompilarPortable.bat`** a cualquier carpeta
+y ejecútalo con doble clic. El lanzador localiza
+`C:\\CitaHelper\\Proyecto\\Personalizado-main` (o una carpeta del proyecto
+bajo `C:\\CitaHelper\\Proyecto`) para encontrar su script de compilación.
+
+El proceso consulta el commit más reciente de
+[Personalizado](https://github.com/vfunes26/Personalizado), descarga **solo
+su código fuente** y reutiliza el Python `.venv`, Camoufox y FPGen que ya están
+instalados. **No descarga el navegador ni los modelos**: si faltan o no coinciden
+los hashes esperados, se detiene. Se necesita internet para consultar la última
+versión del código, pero no hace falta tener Visual Studio abierto.
+
+La salida se guarda en
+`C:\\CitaHelper\\Compilaciones\\Cita Extranjeria Helper - Personalizado`;
+el ZIP verificado queda en `C:\\CitaHelper\\Compilaciones\\Paquetes`.
+Antes de sustituir una **compilación propia anterior**, se verifica el nuevo
+ejecutable y se conservan sus datos `data` y un respaldo en `Respaldos`.
+**Nunca se modifica el portable original que está en el Escritorio**. La primera
+apertura y las pruebas funcionales del nuevo portable se realizarán tras el
+ajuste 16.
+
