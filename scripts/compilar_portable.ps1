@@ -36,26 +36,26 @@ function LocalizarPython([string]$root) {
 function ElegirFuente([string]$root, [string]$requested) {
     $base = Join-Path $root 'Proyecto'
     if (-not (Test-Path -LiteralPath $base -PathType Container)) {
-        throw 'Descomprime primero el ZIP de Personalizado en CitaHelper\\Proyecto.'
+        throw 'Descomprime primero el ZIP de Personalizado en CitaHelper\Proyecto.'
     }
     if ($requested) {
         $candidate = (Resolve-Path -LiteralPath $requested -ErrorAction Stop).ProviderPath
-        if (-not $candidate.StartsWith($base + '\\', [StringComparison]::OrdinalIgnoreCase)) {
-            throw 'La fuente debe estar dentro de CitaHelper\\Proyecto.'
+        if (-not $candidate.StartsWith($base + '\', [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'La fuente debe estar dentro de CitaHelper\Proyecto.'
         }
     } else {
         # Never use the stale source inside the permanent .venv holder.
         $sources = @(Get-ChildItem -LiteralPath $base -Directory | Where-Object {
             -not (Test-Path (Join-Path $_.FullName '.venv')) -and
-            (Test-Path (Join-Path $_.FullName 'scripts\\build_desktop_app.py')) -and
+            (Test-Path (Join-Path $_.FullName 'scripts\build_desktop_app.py')) -and
             (Test-Path (Join-Path $_.FullName 'uv.lock'))
         } | Sort-Object LastWriteTime -Descending)
         if ($sources.Count -eq 0) {
-            throw 'No hay fuente nueva. Descomprime el ZIP main en una carpeta NUEVA dentro de CitaHelper\\Proyecto.'
+            throw 'No hay fuente nueva. Descomprime el ZIP main en una carpeta NUEVA dentro de CitaHelper\Proyecto.'
         }
         $candidate = $sources[0].FullName
     }
-    if (-not (Test-Path (Join-Path $candidate 'app\\version.py'))) {
+    if (-not (Test-Path (Join-Path $candidate 'app\version.py'))) {
         throw 'El ZIP extraido no tiene la estructura esperada.'
     }
     if ((Get-Item -LiteralPath $candidate -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) {
@@ -273,7 +273,7 @@ print('Camoufox, FPGen y dependencias: disponibles SIN descargar.')
             if ($running.Count -gt 0) {
                 throw 'Cierra el portable compilado anterior antes de conservar sus datos.'
             }
-            $migration = Join-Path $source 'scripts\\verify_private_migration.py'
+            $migration = Join-Path $source 'scripts\verify_private_migration.py'
             # Verify there are no symlinks or active WAL files BEFORE robocopy.
             EjecutarPython $python @($migration, $oldData, $oldData)
             Avisar 'Conservando perfiles y configuracion de la compilacion anterior...'
