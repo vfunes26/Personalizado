@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import copy
 import logging
+import re
 import secrets
 import threading
 import time
@@ -190,7 +191,7 @@ class TelegramInbox:
 
     def _request_deletion(self, chat_id, text):
         parts = text.split()
-        if len(parts) != 2 or not parts[1].isdecimal() or len(parts[1]) > 3:
+        if len(parts) != 2 or re.fullmatch(r'[0-9]{1,3}', parts[1]) is None:
             return self._reply(chat_id, 'Uso: /perfiles y después /borrar 2.')
         index = int(parts[1])
         try:
