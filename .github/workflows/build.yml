@@ -189,6 +189,9 @@ jobs:
       - name: Optional Windows portable ZIP
         if: runner.os == 'Windows' && (startsWith(github.ref, 'refs/tags/') || inputs.portable == true)
         run: uv run python scripts/package_release.py --platform windows --arch x64 --portable
+      - name: Prepare small Windows portable file manifest and optional differential
+        if: runner.os == 'Windows' && (startsWith(github.ref, 'refs/tags/') || inputs.portable == true)
+        run: uv run python scripts/build_portable_delta.py --new-zip "data/releases/extranjeria-cita-helper-$(uv run python -c 'from app.version import VERSION; print(VERSION)')-windows-x64-portable.zip" --version "$(uv run python -c 'from app.version import VERSION; print(VERSION)')" --find-previous
       - name: Attest final release packages
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
         id: attest
@@ -200,6 +203,8 @@ jobs:
             data/releases/*.AppImage
             data/releases/*.AppImage.zsync
             data/releases/*-portable.zip
+            data/releases/*.delta.zip
+            data/releases/portable-manifest-*.json
       - name: Attach verification bundles
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
         env:
