@@ -26,6 +26,7 @@ FILES = frozenset({
     'tasks.yml',
     'data/proxy-profiles.json',
     'data/workers-config.json',
+    'data/gmail-settings.json',
     'data/state.db',
     'data/profile-statistics.sqlite3',
     'data/profile-statistics.json',
@@ -231,6 +232,19 @@ def restore_backup(root, source, password, *, allow_replace=False):
     root = Path(root)
     records = _decode(Path(source), password)
     records['tasks.yml'] = _disable_external_notifications(records['tasks.yml'])
+    if 'data/gmail-settings.json' in records:
+        # A secret reference from another Windows account is not portable.
+        # Keep sender/recipient choices, but require new authentication.
+        try:
+            gmail = json.loads(records['data/gmail-settings.json'])
+            if not isinstance(gmail, dict):
+                raise ValueError()
+            gmail['secret_ref'] = ''
+            records['data/gmail-settings.json'] = json.dumps(
+                gmail, ensure_ascii=False, indent=2,
+            ).encode('utf-8')
+        except (ValueError, TypeError):
+            raise BackupError('Configuración de Gmail del respaldo inválida.') from None
     targets = {name: root / name for name in records}
     for path in targets.values():
         if path.is_symlink() or any(parent.is_symlink() for parent in path.parents):
