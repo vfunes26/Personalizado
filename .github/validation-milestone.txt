@@ -1,7 +1,5 @@
-Validación por pares de ajustes
-Ajustes: 13 y 14
-Tipo: Tests — pruebas unitarias y Qt offscreen
-Objetivo: descarga reanudable por HTTP Range, delta Windows firmado, hashes, carpeta independiente, datos privados
-Sin compilación Windows, etiquetas ni publicación de releases
-
-Revalidación integral tras corregir fixture MSI de la prueba de deltas y ampliar protección Windows
+Validación final de 16 ajustes
+Ajustes: 15 y 16
+Tipo: GitHub Actions Tests, unidad, Qt offscreen y preservación de datos
+Cobertura: BAT de compilación local, Camoufox y FPGen offline, respaldo AES-GCM, perfiles, Gmail, proxy, trabajadores, SQLite y migración SHA-256
+No se compila Windows en Actions, no se descargan modelos ni se publica release
