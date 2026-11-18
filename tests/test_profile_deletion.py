@@ -125,3 +125,44 @@ def test_email_failure_is_reported_and_audited(tmp_path):
     result = service.delete('profile-one', revision=store.revision(), origin='telegram')
     assert result['deleted'] and not result['emailed']
     assert 'gmail_failed' in (tmp_path/'data/profile-deletions.jsonl').read_text()
+
+
+def test_deletion_receipt_includes_optional_settings_not_notification_secrets():
+    from app.desktop.profile_deletion import profile_receipt
+    body = profile_receipt({
+        'label': 'Perfil AB',
+        'request': {'access_mode': 'clave', 'clave_method': 'permanente',
+                    'no_slots_mode': 'salir', 'subprocedure': 'HUELLAS',
+                    'appointment_protection': {'daily_limit': 8}},
+        'applicant': {'fill_mode': 'manual',
+                      'contact': {'phone': '600000000', 'email': 'safe@example.com'}},
+        'timings': {'navigation_seconds': 60},
+        'notifications': {'telegram': {'token': 'SECRET-TOKEN-NOT-FOR-EMAIL',
+                                       'secret_ref': 'SECRET-REFERENCE'}},
+    }, 'person_abc')
+    assert 'Perfil AB' in body
+    assert 'permanente' in body
+    assert 'HUELLAS' in body
+    assert 'manual' in body
+    assert 'daily_limit' in body and 'navigation_seconds' in body
+    assert 'SECRET-TOKEN-NOT-FOR-EMAIL' not in body
+    assert 'SECRET-REFERENCE' not in body
+
+
+def test_post_delete_audit_failure_does_not_report_false_failed_deletion(tmp_path):
+    store = seeded(tmp_path)
+    mail = Mail()
+    service = ProfileDeletionService(store, mail=mail)
+    original_audit = service._audit
+
+    def audit_with_failure(profile_id, origin, event):
+        if event in {'deleted', 'gmail_sent'}:
+            raise OSError('audit drive unavailable')
+        original_audit(profile_id, origin, event)
+
+    service._audit = audit_with_failure
+    result = service.delete('profile-one', revision=store.revision(), origin='telegram')
+    assert result['deleted'] and result['emailed']
+    assert 'auditoría' in result['warnings']
+    assert len(mail.sent) == 1
+    assert [row['id'] for row in store._read()['tasks']] == ['profile-two']
