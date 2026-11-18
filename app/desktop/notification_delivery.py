@@ -96,7 +96,9 @@ class NotificationDelivery(QObject):
                         if event_name in allowed_events:
                             recipients.append(recipient)
                 recipients_by_id = {str(r['id']): r for r in recipients if r.get('id')}
-                if not recipients_by_id:
+                if not recipients_by_id and not (
+                    connection['enabled'] and event_name in connection.get('events', [])
+                ):
                     continue
                 connection['recipients'] = list(recipients_by_id.values())
                 secret = ({'token': admin['token']} if admin else

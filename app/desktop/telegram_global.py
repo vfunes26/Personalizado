@@ -19,7 +19,7 @@ class TelegramGlobalError(ValueError):
 
 
 def valid_private_id(value):
-    return isinstance(value, str) and re.fullmatch(r'[1-9][0-9]{3,19}', value) is not None
+    return isinstance(value, str) and re.fullmatch(r'[1-9][0-9]{0,19}', value) is not None
 
 
 class TelegramGlobalStore:
