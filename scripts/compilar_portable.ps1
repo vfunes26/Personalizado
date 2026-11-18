@@ -239,11 +239,23 @@ print('Camoufox, FPGen y dependencias: disponibles SIN descargar.')
         }
         $oldData = Join-Path $ready 'data'
         if (Test-Path -LiteralPath $oldData -PathType Container) {
+            Avisar 'Verificando que la compilacion anterior este cerrada...'
+            $running = @(Get-CimInstance -ClassName Win32_Process -Filter "Name='Cita Extranjeria Helper.exe'" | Where-Object {
+                $_.ExecutablePath -and $_.ExecutablePath.StartsWith(
+                    $ready + '\\', [StringComparison]::OrdinalIgnoreCase)
+            })
+            if ($running.Count -gt 0) {
+                throw 'Cierra el portable compilado anterior antes de conservar sus datos.'
+            }
+            $migration = Join-Path $source 'scripts\\verify_private_migration.py'
+            # Verify there are no symlinks or active WAL files BEFORE robocopy.
+            EjecutarPython $python @($migration, $oldData, $oldData)
             Avisar 'Conservando perfiles y configuracion de la compilacion anterior...'
             & robocopy.exe $oldData (Join-Path $candidate 'data') /E /XJ /R:1 /W:1 /NFL /NDL /NP
             if ($LASTEXITCODE -ge 8) {
                 throw 'No fue posible copiar los datos privados. La version anterior sigue intacta.'
             }
+            EjecutarPython $python @($migration, $oldData, (Join-Path $candidate 'data'))
         }
     }
 
