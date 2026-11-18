@@ -54,7 +54,10 @@ class WorkerSlot(QObject):
         self.changed.emit(self.index)
 
     def refuse(self, reason):
-        self.set_status('No iniciado', 'danger')
+        # Show the reason in the status tooltip, not only in the log beneath
+        # the worker table. The panel elides long text but keeps this intact.
+        reason = str(reason)
+        self.set_status('No iniciado: ' + reason, 'danger')
         self.log('NO INICIADO: ' + reason)
 
     def on_state(self, state):
@@ -92,7 +95,9 @@ class WorkerSlot(QObject):
 
     def on_finished(self, code):
         self.log('Trabajador detenido.' if not code else f'Trabajador terminado con error (codigo {code}).')
-        self.set_status('Detenido' if not code else f'Fallo: codigo {code}', 'muted' if not code else 'danger')
+        # Preserve a more useful error already received from the worker.
+        status = self.failed_text if code and self.failed_text else ('Detenido' if not code else f'Fallo: codigo {code}')
+        self.set_status(status, 'danger' if code else 'muted')
         self.finished.emit(self.index)
 
     def on_notification(self, channel, message):
@@ -211,9 +216,7 @@ class WorkerPool(QObject):
                 ok, detail = False, f'error inesperado: {exc}'
             label = slot.proxy['label'] if slot.proxy else ''
             if not ok:
-                slot.set_status('Fallo: proxy no responde', 'danger')
-                slot.log(f'NO INICIADO: el proxy «{label}» fallo: {detail}. Este trabajador no sale con la IP local; '
-                         'los demas trabajadores siguen su curso.')
+                slot.refuse(f'El proxy «{label}» falló: {detail}. No se utilizará la IP local.')
                 continue
             slot.log(f'Proxy «{label}»: {detail}.')
             self._launch(slot)
@@ -236,8 +239,7 @@ class WorkerPool(QObject):
                 except ProxyProfileError:
                     store.bind_request_profile(slot.profile_id, None, enabled=False)
         except ProxyProfileError as exc:
-            slot.set_status('Fallo: proxy no disponible', 'danger')
-            slot.log(f'NO INICIADO: {exc}. Este trabajador no sale con la IP local.')
+            slot.refuse(f'{exc}. No se utilizará la IP local.')
             return
         if slot.controller is None:
             slot.controller = DesktopController(self.store)
@@ -251,8 +253,7 @@ class WorkerPool(QObject):
             slot.notifier.result.connect(slot.on_notification)
         slot.notifier.reset()
         if not slot.notifier.prepare(slot.profile_id):
-            slot.set_status('No iniciado', 'danger')
-            slot.log('NO INICIADO: no se pudieron preparar los secretos de notificaciones del perfil.')
+            slot.refuse('No se pudieron preparar los secretos de notificaciones del perfil.')
             return
         slot.controller.extra_env = {'CITA_REQUIRE_PROXY': '1'} if proxy else {}
         slot.log(f'Iniciando Camoufox con proxy «{proxy["label"]}».' if proxy
