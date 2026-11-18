@@ -1,0 +1,4 @@
+Validación manualmente aprobada por rondas
+Ajustes: 5 y 6
+Tipo: pruebas unitarias y de interfaz en modo offscreen
+Sin compilación ni publicación de archivos
