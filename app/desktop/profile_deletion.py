@@ -37,6 +37,11 @@ def profile_receipt(raw, profile_id):
         ('Provincia', request.get('province', '')),
         ('Oficina', request.get('office') or 'Cualquiera'),
         ('Acceso', request.get('access_mode', '')),
+        ('Método Cl@ve', request.get('clave_method', '')),
+        ('Subtrámite', request.get('subprocedure') or ''),
+        ('Comportamiento sin citas', request.get('no_slots_mode', '')),
+        ('Espera del solicitante', request.get('applicant_no_slots_mode', '')),
+        ('Relleno de formulario', applicant.get('fill_mode', '')),
         ('Documento', applicant.get('document_type', '')),
         ('Número de documento', applicant.get('document_number', '')),
         ('Nombre completo', applicant.get('full_name', '')),
@@ -44,6 +49,13 @@ def profile_receipt(raw, profile_id):
         ('Teléfono', contact.get('phone', '')),
         ('Correo', contact.get('email', '')),
     ]
+    protection = request.get('appointment_protection')
+    if isinstance(protection, dict):
+        # Profile request settings, not browser sessions or notification secrets.
+        rows.append(('Protección de citas', json.dumps(protection, ensure_ascii=False, sort_keys=True)))
+    timings = raw.get('timings')
+    if isinstance(timings, dict):
+        rows.append(('Temporizadores', json.dumps(timings, ensure_ascii=False, sort_keys=True)))
     return '\n'.join(f'{title}: {str(value)}' for title, value in rows)
 
 
