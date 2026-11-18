@@ -7,7 +7,7 @@ import pytest
 
 
 def release(version='0.2.0'):
-    base='https://github.com/itwormz/extranjeria-cita-helper/releases/download/v'+version+'/'
+    base='https://github.com/vfunes26/Personalizado/releases/download/v'+version+'/'
     name='extranjeria-cita-helper-'+version+'-windows-x64.msi'
     return {'tag_name':'v'+version,'immutable':True,'assets':[{'name':name,'browser_download_url':base+name,'size':7},
             {'name':'SHA256SUMS','browser_download_url':base+'SHA256SUMS','size':200},
@@ -28,7 +28,7 @@ def test_release_rejects_untrusted_or_ambiguous_assets(change):
     from app.desktop.updates import select_release
     data=release()
     if change=='external': data['assets'][0]['browser_download_url']='https://evil.example/app.msi'
-    if change=='wrong_project':data['assets'][0]['browser_download_url']=data['assets'][0]['browser_download_url'].replace('itwormz/','other/')
+    if change=='wrong_project':data['assets'][0]['browser_download_url']=data['assets'][0]['browser_download_url'].replace('vfunes26/','other/')
     if change=='traversal': data['tag_name']='v../../0.2.0'
     if change=='oversized': data['assets'][0]['size']=3*1024**3
     if change=='duplicate': data['assets'].append(dict(data['assets'][0]))
@@ -167,3 +167,28 @@ def test_renamed_release_assets(target, arch, portable, name):
          "browser_download_url": proof["browser_download_url"].replace(old["name"], name)},
     ]
     assert select_release(data, "0.1.0", target, arch, portable=portable).name == name
+
+
+def test_project_updater_never_uses_original_repository():
+    from app.desktop.updates import API, API_ROOT, REPOSITORY, release_commit
+    from app.attestations import REPOSITORY as SIGNED_REPOSITORY
+    assert REPOSITORY == SIGNED_REPOSITORY == 'https://github.com/vfunes26/Personalizado'
+    assert API == 'https://api.github.com/repos/vfunes26/Personalizado/releases/latest'
+    assert 'itwormz' not in API
+    import io
+    calls = []
+    def fake_fetch(url):
+        calls.append(url)
+        return io.BytesIO(json.dumps({'object': {'type': 'commit', 'sha': 'b'*40}}).encode())
+    assert release_commit('0.2.0', fake_fetch) == 'b'*40
+    assert calls == [API_ROOT + '/git/ref/tags/v0.2.0']
+
+
+def test_project_updater_refuses_old_repository_assets():
+    from app.desktop.updates import select_release
+    old = release()
+    for asset in old['assets']:
+        asset['browser_download_url'] = asset['browser_download_url'].replace(
+            'vfunes26/Personalizado', 'itwormz/extranjeria-cita-helper')
+    with pytest.raises(ValueError):
+        select_release(old, '0.1.0', 'windows', 'x64')
