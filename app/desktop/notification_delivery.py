@@ -91,7 +91,15 @@ class NotificationDelivery(QObject):
             self.jobs.submit(deliver,done)
 
     def reset(self):
-        self.generation+=1;self.router=EventRouter();self.telegram_router=EventRouter();self.current_visit=None
-        self.secrets={};self.prepared_profile=None
+        # Keep informational cooldowns when restarting the SAME profile.
+        # This prevents duplicate NIE restriction alerts across worker runs,
+        # without sharing a different applicant's cooldowns.
+        webhook_sent = dict(self.router.sent)
+        telegram_sent = dict(self.telegram_router.sent)
+        self.generation += 1
+        self.router = EventRouter(); self.router.sent.update(webhook_sent)
+        self.telegram_router = EventRouter(); self.telegram_router.sent.update(telegram_sent)
+        self.current_visit = None
+        self.secrets = {}; self.prepared_profile = None
 
     def stop(self):self.closed=True;self.reset()
