@@ -106,6 +106,10 @@ def test_cleanup_runs_separately_after_manual_test_and_preserves_dependencies():
     assert "Remove-Item -LiteralPath $root" not in cleanup
     assert "Remove-Item -LiteralPath $portable" not in cleanup
     assert "RespaldoPrivados" not in cleanup or 'No se elimino .venv' in cleanup
+    # PowerShell 5.1 does not interpret backslashes as string escapes.
+    # Avoid doubled separators in StartsWith/TrimEnd comparisons.
+    assert "\\\\" not in cleanup
+    assert "\\\\" not in (ROOT / 'scripts/compilar_portable.ps1').read_text(encoding='utf-8')
 
 
 def test_compiler_from_manual_source_is_immune_to_unwanted_private_files():
