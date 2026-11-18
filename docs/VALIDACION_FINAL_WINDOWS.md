@@ -97,3 +97,28 @@ datos del portable del Escritorio.
 - Inicio de la nueva interfaz y navegador comprobados manualmente.
 - Respaldo/restauración, Telegram/Gmail y trabajadores comprobados manualmente.
 - Portable anterior conservado hasta que se compruebe la nueva versión.
+
+
+## Corrección aplicada tras primera compilación en Windows
+
+El primer intento de compilación de la versión `0.3.5` produjo un error
+`FileNotFoundError` durante `PyInstaller COLLECT` al escribir
+`_internal/cryptography-50.0.2.dist-info/sboms/cryptography-rust.cyclonedx.json`.
+El ejecutable ya se había construido, pero **el portable no estaba completo**.
+
+La causa era una ruta física excesivamente larga bajo
+`C:\\CitaHelper\\CacheCompilacion\\FuentesGitHub\\Personalizado-<SHA>\\Personalizado-<SHA>`.
+El controlador actualizado conserva el ZIP del código fuente en la caché,
+pero extrae y compila desde `C:\\CitaHelper\\s\\<12 caracteres del SHA>\\Personalizado-<SHA>`,
+comprobando que la ruta del proyecto sea de como máximo 120 caracteres.
+
+No hay que reinstalar dependencias ni descargar Camoufox o FPGen.
+Solo hay que actualizar el pequeño archivo
+`C:\\CitaHelper\\Proyecto\\Personalizado-final\\scripts\\compilar_portable.ps1`
+y ejecutar de nuevo `C:\\CitaHelper\\CompilarPortable.bat`. El controlador
+consulta la versión actual de GitHub y almacena en caché el nuevo ZIP
+**del código**, no el navegador. Se conserva el intento fallido para
+diagnóstico hasta finalizar la prueba en Windows.
+
+La versión de PyInstaller observada en ese intento fue `6.22.3`, Python
+`3.13.18`, hooks `2026.8` y Windows `10.0.19045`.
