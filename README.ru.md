@@ -2,9 +2,9 @@
 
 🇬🇧 [English](README.md) · 🇷🇺 **Русский** · 🇪🇸 [Español](README.es.md)
 
-[![Последний релиз](https://img.shields.io/github/v/release/itwormz/extranjeria-cita-helper?sort=date&display_name=tag&label=%D1%80%D0%B5%D0%BB%D0%B8%D0%B7&color=626bdf&logo=github)](https://github.com/itwormz/extranjeria-cita-helper/releases/latest)
+[![Последний релиз](https://img.shields.io/github/v/release/vfunes26/Personalizado?sort=date&display_name=tag&label=%D1%80%D0%B5%D0%BB%D0%B8%D0%B7&color=626bdf&logo=github)](https://github.com/vfunes26/Personalizado/releases/latest)
 
-[Скачать](https://github.com/itwormz/extranjeria-cita-helper/releases/latest) · [Что нового](https://github.com/itwormz/extranjeria-cita-helper/releases/latest) · [Полный чейнджлог](CHANGELOG.md)
+[Скачать](https://github.com/vfunes26/Personalizado/releases/latest) · [Что нового](https://github.com/vfunes26/Personalizado/releases/latest) · [Полный чейнджлог](CHANGELOG.md)
 
 **💜 Поддержать разработку**
 
@@ -24,7 +24,7 @@
 
 ## 🚀 Быстрый старт
 
-1. [Скачайте приложение](https://github.com/itwormz/extranjeria-cita-helper/releases/latest).
+1. [Скачайте приложение](https://github.com/vfunes26/Personalizado/releases/latest).
 2. В **Настройки → Создать профиль** укажите провинцию, услугу, способ входа и данные заявителя.
 3. Во вкладке **Работа** выберите профиль, нажмите **Запустить** и авторизуйтесь в Camoufox.
 4. Оставьте браузер открытым. При уведомлении выберите офис или завершите запись.
@@ -149,7 +149,7 @@ HTTPS-адрес, POST или GET, выбор событий. Дополните
 
 Диагностика включается в настройках и сохраняет страницы и снимки локально. При ручном оформлении снимки не делаются; могут сохраняться HTML, сведения о переходах и JavaScript сайта. Папка диагностики открывается из приложения.
 
-При ошибке запуска браузера нажмите **Скопировать отчёт** и приложите его к [GitHub Issue](https://github.com/itwormz/extranjeria-cita-helper/issues). Перед отправкой диагностики удалите персональные данные.
+При ошибке запуска браузера нажмите **Скопировать отчёт** и приложите его к [GitHub Issue](https://github.com/vfunes26/Personalizado/issues). Перед отправкой диагностики удалите персональные данные.
 
 Данные документа, контакты, CAPTCHA и номер подтверждения не передаются через уведомления. [Конфиденциальность](docs/PRIVACY.md).
 
@@ -212,7 +212,7 @@ HTTPS-адрес, POST или GET, выбор событий. Дополните
 Нужны [Git](https://git-scm.com/install/), [uv](https://docs.astral.sh/uv/getting-started/installation/), интернет и графическое окружение. На Windows — WSL с поддержкой графических приложений.
 
 ```sh
-git clone https://github.com/itwormz/extranjeria-cita-helper.git
+git clone https://github.com/vfunes26/Personalizado.git
 cd extranjeria-cita-helper
 uv python install 3.13
 uv sync --frozen --python 3.13 --extra desktop
