@@ -5,6 +5,7 @@ from pathlib import Path
 from app.config import _NIE_LETTERS
 from app.desktop.profiles import ProfileStore
 from app.notifications import EVENTS
+from app.profile_intake import parse_submission
 from app.telegram_inbox import MAX_CREATED_PER_HOUR, TelegramInbox
 
 CATALOG = Path(__file__).resolve().parents[1] / 'catalogs' / 'snapshot-2026-08-12.json'
@@ -345,3 +346,49 @@ def test_confirmation_cannot_be_replayed_to_delete_twice():
         client.updates = [callback(5, token, message_id=message_id)]
         inbox.poll_once()
         assert len(store.load()) == 1 and len(mail.sent) == 1
+
+
+def test_global_telegram_is_independent_of_profile_notifications_and_restricts_chats():
+    with tempfile.TemporaryDirectory() as folder:
+        from app.desktop.telegram_global import TelegramGlobalStore
+        store, vault, client, inbox, _ = setup(folder)
+        other = 222333444
+        settings = TelegramGlobalStore(Path(folder), vault=vault)
+        settings.save(str(ALLOWED), [str(other)], token='123456:ABCDEF')
+        assert inbox.prepare()
+        assert inbox.source.profile_id is None
+        assert inbox.source.owner_id == str(ALLOWED)
+        assert inbox.source.allowed_chats == {str(ALLOWED), str(other)}
+        assert inbox.handle_message(message(1, '/plantilla', chat=STRANGER)['message']) is False
+        assert inbox.handle_message(message(2, '/plantilla', chat=other)['message']) is True
+
+
+def test_authorized_creator_cannot_list_or_delete_other_profiles():
+    with tempfile.TemporaryDirectory() as folder:
+        from app.desktop.telegram_global import TelegramGlobalStore
+        store, vault, client, inbox, _ = setup(folder)
+        other = 222333444
+        TelegramGlobalStore(Path(folder), vault=vault).save(
+            str(ALLOWED), [str(other)], token='123456:ABCDEF')
+        assert inbox.prepare()
+        # The original 'Base' profile was created locally and belongs to
+        # no Telegram creator, so an authorized user must not see it.
+        assert inbox._profiles_text(str(other)) == 'No hay perfiles.'
+        assert 'Base' in inbox._profiles_text(str(ALLOWED))
+        inbox._create(parse_submission(submission(), inbox.catalog).fields, chat_id=str(other))
+        created = [t for t in store.load() if t.label != 'Base']
+        assert len(created) == 1
+        raw = store.raw_profile(created[0].id)
+        assert raw['telegram_owner_chat_id'] == str(other)
+        assert {r['id'] for r in raw['notifications']['telegram']['recipients']} == {
+            str(ALLOWED), str(other)}
+        own = next(r for r in raw['notifications']['telegram']['recipients']
+                   if r['id'] == str(other))
+        assert own['events'] == ['office', 'booking']
+        authorized_list = inbox._profiles_text(str(other))
+        assert 'Base' not in authorized_list
+        assert created[0].label in authorized_list
+        # Revoked ID cannot continue accessing the bot.
+        TelegramGlobalStore(Path(folder), vault=vault).save(str(ALLOWED), [])
+        assert inbox.prepare()
+        assert not inbox.handle_message(message(8, '/perfiles', chat=other)['message'])
