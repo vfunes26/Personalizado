@@ -67,6 +67,10 @@ def find_source(store, vault, preferred_id=None):
         recipients = [dict(id=id_, label='ID autorizado', type='private', username='')
                       for id_ in ids]
         return Source(None, global_credentials['token'], recipients, EVENTS, owner_id=owner)
+    # An imported/disabled global configuration must never silently start a
+    # different legacy bot, which may have broader permissions.
+    if TelegramGlobalStore(store.path.parent, vault=vault).path.exists():
+        return None
     tasks = store.load()
     ordered = sorted(tasks, key=lambda t: (t.id != preferred_id,))
     for task in ordered:
@@ -358,7 +362,10 @@ class TelegramInbox:
                 return True
             duplicate = self._duplicate(result.identity)
             if duplicate:
-                self._reply(chat_id, f'ℹ Ya existe un perfil con ese documento, trámite, provincia y acceso: «{duplicate}». No se creó otro.')
+                if self.source and self.source.owner_id and not self.source.is_owner(chat_id):
+                    self._reply(chat_id, 'ℹ Ya existe una solicitud con esos datos. No se creó otro perfil.')
+                else:
+                    self._reply(chat_id, f'ℹ Ya existe un perfil con ese documento, trámite, provincia y acceso: «{duplicate}». No se creó otro.')
                 return True
             profile_id = self._create(result.fields, chat_id=chat_id)
             self._notify_owner(chat_id, '✅ Nuevo perfil creado por ID autorizado: «' + result.fields.get('label', '') + '».')
