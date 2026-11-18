@@ -247,24 +247,30 @@ Gracias por ayudar a difundir el proyecto:
 
 ## Compilación local del portable personalizado (Windows)
 
-Al finalizar los ajustes del proyecto, copia **`CompilarPortable.bat`** a cualquier carpeta
-y ejecútalo con doble clic. El lanzador localiza
-`C:\\CitaHelper\\Proyecto\\Personalizado-main` (o una carpeta del proyecto
-bajo `C:\\CitaHelper\\Proyecto`) para encontrar su script de compilación.
+**Modalidad manual, sin descargar el código desde el BAT:**
 
-El proceso consulta el commit más reciente de
-[Personalizado](https://github.com/vfunes26/Personalizado), descarga **solo
-su código fuente** y reutiliza el Python `.venv`, Camoufox y FPGen que ya están
-instalados. **No descarga el navegador ni los modelos**: si faltan o no coinciden
-los hashes esperados, se detiene. Se necesita internet para consultar la última
-versión del código, pero no hace falta tener Visual Studio abierto.
+1. Descarga tú mismo el ZIP de [Personalizado / main](https://github.com/vfunes26/Personalizado/archive/refs/heads/main.zip) y descomprímelo en `C:\\CitaHelper\\Proyecto\\Personalizado-nuevo`. Si ya existe `Personalizado-main` con `.venv`, **no lo sobrescribas**.
+2. Conserva `C:\\CitaHelper\\Proyecto\\Personalizado-main\\.venv`, Python 3.13.18, Camoufox y FPGen preparados. Copia los archivos `CompilarPortable.bat`, `LimpiarPortable.bat`, `scripts/compilar_portable.ps1` y `scripts/limpiar_portable.ps1` desde el ZIP nuevo a `C:\\CitaHelper` (los controladores `.ps1` van directamente en la raíz, no dentro de `scripts`).
+3. Ejecuta `CompilarPortable.bat` con doble clic, desde cualquier carpeta. Selecciona la fuente manual descomprimida y la copia a una ruta corta `C:\\CitaHelper\\s\\...`. Usa solo las dependencias ya instaladas, comprueba el modelo FPGen y ejecuta PyInstaller, las pruebas del ejecutable y su empaquetado ZIP con SHA-256.
+4. El portable final es la **carpeta descomprimida**
+   `C:\\CitaHelper\\Compilaciones\\Cita Extranjeria Helper - Personalizado`. Al finalizar correctamente se eliminan los archivos ZIP y temporales de ese intento; no se conserva un segundo portable comprimido.
+5. **Abre y prueba manualmente el ejecutable nuevo antes de limpiar más archivos.**
+   Después haz doble clic en `LimpiarPortable.bat` (o usa
+   `CompilarPortable.bat /limpiar`), escribe `LIMPIAR` para confirmar y
+   se quitarán los ZIP antiguos, temporales `.preparando-*`, fuentes manuales sin
+   `.venv` y la caché antigua de código fuente.
 
-La salida se guarda en
-`C:\\CitaHelper\\Compilaciones\\Cita Extranjeria Helper - Personalizado`;
-el ZIP verificado queda en `C:\\CitaHelper\\Compilaciones\\Paquetes`.
-Antes de sustituir una **compilación propia anterior**, se verifica el nuevo
-ejecutable y se conservan sus datos `data` y un respaldo en `Respaldos`.
-**Nunca se modifica el portable original que está en el Escritorio**. La primera
-apertura y las pruebas funcionales del nuevo portable se realizarán tras el
-ajuste 16.
+La limpieza **no borra** la carpeta con `.venv`, las cachés UV/Camoufox/FPGen,
+los datos privados, los respaldos ni el portable original del Escritorio.
+Eliminar `.venv` impediría recompilar sin reinstalar las dependencias.
 
+**Para cambiar de ordenador, respalda únicamente la carpeta del portable
+descomprimido**. El ejecutable lleva incorporados su Python, Camoufox y FPGen;
+no necesitas trasladar `.venv` ni el proyecto fuente para **ejecutarlo**.
+Para **volver a compilar** en otro Windows sí hay que preparar Python y las
+dependencias nativas de esa máquina. No se garantiza que mover `.venv` desde
+otro PC funcione debido a las rutas absolutas de Windows.
+
+La compilación no necesita Visual Studio abierto y nunca modifica el portable
+original del Escritorio. Más detalle en
+[Validación final Windows](docs/VALIDACION_FINAL_WINDOWS.md).
