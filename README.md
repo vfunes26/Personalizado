@@ -2,9 +2,9 @@
 
 🇬🇧 **English** · 🇷🇺 [Русский](README.ru.md) · 🇪🇸 [Español](README.es.md)
 
-[![Latest release](https://img.shields.io/github/v/release/itwormz/extranjeria-cita-helper?sort=date&display_name=tag&label=release&color=626bdf&logo=github)](https://github.com/itwormz/extranjeria-cita-helper/releases/latest)
+[![Latest release](https://img.shields.io/github/v/release/vfunes26/Personalizado?sort=date&display_name=tag&label=release&color=626bdf&logo=github)](https://github.com/vfunes26/Personalizado/releases/latest)
 
-[Download](https://github.com/itwormz/extranjeria-cita-helper/releases/latest) · [What’s new](https://github.com/itwormz/extranjeria-cita-helper/releases/latest) · [Full changelog](CHANGELOG.md)
+[Download](https://github.com/vfunes26/Personalizado/releases/latest) · [What’s new](https://github.com/vfunes26/Personalizado/releases/latest) · [Full changelog](CHANGELOG.md)
 
 **💜 Support development**
 
@@ -24,7 +24,7 @@ An assistant for finding **Toma de huellas / TIE** and **Autorización de regres
 
 ## 🚀 Quick start
 
-1. [Download the app](https://github.com/itwormz/extranjeria-cita-helper/releases/latest).
+1. [Download the app](https://github.com/vfunes26/Personalizado/releases/latest).
 2. In **Settings → Create profile**, enter the province, service, authentication method and applicant details.
 3. In **Monitor**, select the profile, click **Start** and sign in through Camoufox.
 4. Leave the browser open. When alerted, choose an office or complete the booking.
@@ -149,7 +149,7 @@ Package authenticity and integrity are verified before installation. The search 
 
 Enable diagnostics in settings to save pages and screenshots locally. During manual booking, screenshots are suspended; HTML, navigation metadata and the site’s JavaScript may still be saved. Open the diagnostics folder from the app.
 
-If the browser fails to start, click **Copy report** and attach it to a [GitHub Issue](https://github.com/itwormz/extranjeria-cita-helper/issues). Remove personal data before sharing diagnostics.
+If the browser fails to start, click **Copy report** and attach it to a [GitHub Issue](https://github.com/vfunes26/Personalizado/issues). Remove personal data before sharing diagnostics.
 
 Document details, contacts, CAPTCHA and confirmation numbers are not sent through notifications. [Privacy](docs/PRIVACY.md).
 
@@ -212,7 +212,7 @@ Versions are pinned in [uv.lock](uv.lock). Update verification uses Sigstore and
 Requires [Git](https://git-scm.com/install/), [uv](https://docs.astral.sh/uv/getting-started/installation/), internet access and a graphical environment. On Windows, use WSL with GUI support.
 
 ```sh
-git clone https://github.com/itwormz/extranjeria-cita-helper.git
+git clone https://github.com/vfunes26/Personalizado.git
 cd extranjeria-cita-helper
 uv python install 3.13
 uv sync --frozen --python 3.13 --extra desktop
