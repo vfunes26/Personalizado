@@ -11,3 +11,5 @@ Validación de la compilación manual offline y limpieza segura 2026-11-18: nuev
 Revalidación final del BAT auto-instalable desde ZIP manual, controlador sin internet, limpieza protegida y guías.
 
 Prueba final: LimpiarPortable.bat permite limpieza directa desde ZIP sin compilar, con confirmación y exclusiones.
+
+Revalidación final del PowerShell 5.1: separadores únicos en pruebas de rutas, fuente y limpiador.
