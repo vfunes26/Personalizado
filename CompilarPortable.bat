@@ -17,6 +17,13 @@ if exist "%~dp0scripts\compilar_portable.ps1" (
 if exist "%~dp0scripts\limpiar_portable.ps1" (
   copy /Y "%~dp0scripts\limpiar_portable.ps1" "%LIMPIADOR%" >nul
   if errorlevel 1 goto :error
+  rem El BAT lanzado desde el ZIP deja su propia copia nueva en la raiz.
+  copy /Y "%~f0" "%RAIZ%\CompilarPortable.bat" >nul
+  if errorlevel 1 goto :error
+  if exist "%~dp0LimpiarPortable.bat" (
+    copy /Y "%~dp0LimpiarPortable.bat" "%RAIZ%\LimpiarPortable.bat" >nul
+    if errorlevel 1 goto :error
+  )
 )
 if /I "%~1"=="/limpiar" goto :limpiar
 if /I "%~1"=="-LimpiarDespuesDeProbar" goto :limpiar
