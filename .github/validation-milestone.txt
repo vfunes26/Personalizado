@@ -17,3 +17,5 @@ Revalidación final del PowerShell 5.1: separadores únicos en pruebas de rutas,
 Verificación final de comillas de Windows en -Proyecto para carpeta ZIP con barra final.
 
 Validación de cierre: liberar BAT del ZIP en nueva consola antes de eliminar fuente, sin borrar datos privados.
+
+Ronda 1 2026-11-18: ajuste 1 validacion de portable Windows; ajuste 2 uv.lock versus .venv sin red; limpieza conservando Personalizado-final vacia y respaldos privados por SHA-256.
