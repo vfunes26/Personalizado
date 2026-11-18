@@ -24,18 +24,17 @@ del usuario; no se simulan como si ya hubieran pasado.
 
 ## Instalar los archivos ligeros del BAT
 
-Del ZIP nuevo, guardar en la raíz de `C:\\CitaHelper`:
+**No hace falta copiarlos a mano:** después de extraer el ZIP actualizado,
+haz doble clic en `CompilarPortable.bat` **dentro de esa carpeta extraída**.
+Detectará su directorio `scripts` y copiará a `C:\\CitaHelper` los cuatro
+archivos pequeños necesarios:
 
 - `CompilarPortable.bat` y `LimpiarPortable.bat`.
-- `scripts\\compilar_portable.ps1` renombrado en destino solo como
-  `C:\\CitaHelper\\compilar_portable.ps1`.
-- `scripts\\limpiar_portable.ps1` renombrado en destino solo como
+- `C:\\CitaHelper\\compilar_portable.ps1` y
   `C:\\CitaHelper\\limpiar_portable.ps1`.
 
-Los BAT pueden moverse al Escritorio: siempre buscan el controlador bajo
-`C:\\CitaHelper`. Cuando un BAT se ejecuta directamente desde el árbol fuente
-donde está su carpeta `scripts`, copia automáticamente ambos controladores
-a `C:\\CitaHelper`.
+Desde ese momento los BAT pueden moverse al Escritorio y seguirán funcionando.
+La compilación también comienza desde el mismo doble clic.
 
 ## Compilación y verificación
 
