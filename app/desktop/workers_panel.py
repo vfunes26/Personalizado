@@ -191,11 +191,13 @@ class WorkersPanel(QWidget):
         self.proxy_note.setText(f'Probando {tested} proxy(s)…' if tested else 'No hay proxies escritos para probar.')
 
     def _set_probe(self, row, ok, detail):
-        row['status'].setText('✔' if ok else '✖')
-        row['status'].setStyleSheet(PROBE_OK if ok else PROBE_BAD)
+        partial = bool(ok and 'no verificado' in detail.lower())
+        row['status'].setText('⚠' if partial else '✔' if ok else '✖')
+        row['status'].setStyleSheet(PROBE_WAIT if partial else PROBE_OK if ok else PROBE_BAD)
         row['status'].setToolTip(detail)
         name = row['label'].text().strip() or f'Proxy {self.proxy_rows.index(row) + 1}'
-        self.append_log(None, f'Prueba de proxy «{name}»: ' + ('OK' if ok else 'FALLO') + f' — {detail}')
+        label = 'PARCIAL' if partial else 'OK' if ok else 'FALLO'
+        self.append_log(None, f'Prueba de proxy «{name}»: {label} — {detail}')
 
     def _poll_probes(self):
         pending = False
@@ -214,9 +216,10 @@ class WorkersPanel(QWidget):
             self._set_probe(row, ok, detail)
         if not pending:
             self.probe_timer.stop()
-            results = [row['status'].text() for row in self.proxy_rows if row['status'].text() in {'✔', '✖'}]
+            results = [row['status'].text() for row in self.proxy_rows if row['status'].text() in {'✔', '✖', '⚠'}]
             if results:
-                self.proxy_note.setText(f'Resultado: {results.count("✔")} correcto(s), {results.count("✖")} con fallo.')
+                self.proxy_note.setText(f'Resultado: {results.count("✔")} verificado(s), '
+                                        f'{results.count("⚠")} parcial(es), {results.count("✖")} con fallo.')
 
     def save_proxies(self):
         store = self.main_window._proxy_store()
