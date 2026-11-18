@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import platform
 import re
+import sys
 import ssl
 import certifi
 import threading
@@ -16,6 +17,7 @@ from urllib.request import Request, urlopen
 from PySide6.QtCore import QObject,QThread,Signal
 from ..attestations import verify_attestation, MAX_BUNDLE, AttestationError, REPOSITORY
 from .resumable_download import DownloadNetworkError, discard_partial, fetch_package
+from .portable_delta import DeltaIncompatible, check_delta_base, delta_asset_name, stage_delta
 
 API_ROOT='https://api.github.com/repos/'+REPOSITORY.removeprefix('https://github.com/')
 API=API_ROOT+'/releases/latest'
@@ -45,6 +47,7 @@ class Release:
     sums_url:str
     size:int
     attestation_url:str
+    delta: object = None
 
 
 def select_release(data,current,target,arch,*,portable=False):
@@ -88,7 +91,22 @@ def select_release(data,current,target,arch,*,portable=False):
     size=package.get('size')
     if not isinstance(size,int) or isinstance(size,bool) or not 0<size<=MAX_PACKAGE:
         raise ValueError('Invalid package size')
-    return Release(version,name,package['browser_download_url'],sums['browser_download_url'],size,proof['browser_download_url'])
+    delta = None
+    # A patch is optional. The full, signed portable ZIP remains the fallback.
+    if portable and re.fullmatch(r'[0-9]+\\.[0-9]+\\.[0-9]+', current):
+        patch_name = delta_asset_name(name, current)
+        patch_items = [a for a in data.get('assets', []) if a.get('name') == patch_name]
+        proof_items = [a for a in data.get('assets', []) if a.get('name') == patch_name+'.sigstore.json']
+        patch_url = base + patch_name
+        if (len(patch_items) == len(proof_items) == 1 and
+                patch_items[0].get('browser_download_url') == patch_url and
+                proof_items[0].get('browser_download_url') == patch_url+'.sigstore.json'
+                and type(patch_items[0].get('size')) is int and
+                0 < patch_items[0]['size'] < size):
+            delta = Release(version, patch_name, patch_url, sums['browser_download_url'],
+                            patch_items[0]['size'], patch_url+'.sigstore.json')
+    return Release(version,name,package['browser_download_url'],
+                   sums['browser_download_url'],size,proof['browser_download_url'],delta)
 
 
 def fetch(url, *, headers=None):
@@ -220,7 +238,42 @@ class UpdateService(QObject):
             return select_release(json.loads(data),self.current,*release_target(),portable=portable_mode())
         return self._start(operation,self.checked)
     def download(self,release):
-        return self._start(lambda job:download_release(release,self.directory,job.cancelled,progress=job.progress.emit),self.downloaded)
-    def verify(self,path):return self._start(lambda job:verify_download(path),self.verified)
+        def operation(job):
+            from .paths import portable_mode
+            if portable_mode() and release.delta is not None:
+                patched = download_release(
+                    release.delta, self.directory, job.cancelled, progress=job.progress.emit)
+                try:
+                    check_delta_base(Path(sys.executable).parent, patched,
+                                     self.current, release.version)
+                except DeltaIncompatible:
+                    # A different/modified installed version cannot reuse bytes.
+                    # The user already requested a download, so fetch the full
+                    # signed release instead of patching untrusted source files.
+                    return download_release(
+                        release, self.directory, job.cancelled, progress=job.progress.emit)
+                return patched
+            return download_release(
+                release, self.directory, job.cancelled, progress=job.progress.emit)
+        return self._start(operation,self.downloaded)
+    def verify(self,path):
+        def operation(job):
+            checked = verify_download(path)
+            from .paths import portable_mode
+            if portable_mode() and Path(checked).name.endswith('.delta.zip'):
+                return stage_delta(
+                    Path(sys.executable).parent, checked, self.current,
+                    self._delta_target_version(checked),
+                    verifier=lambda _path: checked)
+            return checked
+        return self._start(operation,self.verified)
+    @staticmethod
+    def _delta_target_version(path):
+        match = re.fullmatch(
+            r'(?:extranjeria-cita-helper|SantaCita)-([0-9]+\\.[0-9]+\\.[0-9]+)-'
+            r'windows-x64-portable-from-[0-9]+\\.[0-9]+\\.[0-9]+\\.delta\\.zip',
+            Path(path).name)
+        if not match: raise ValueError('Nombre de diferencial no reconocido')
+        return match.group(1)
     def cancel(self):
         if self.job:self.job.cancelled.set()
