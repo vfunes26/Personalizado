@@ -98,6 +98,8 @@ def test_worker_crash_stderr_is_reported_once(tmp_path, catalog_path, qt_app, mo
     assert checks == [False]
     assert 'ImportError' in report['message']
     assert 'browser component missing' not in report['message']
+    assert 'sin respuesta inicial del trabajador' in report['message']
+    assert 'salida con código de error' in report['message']
 
 def test_slow_startup_uses_longer_heartbeat_grace(tmp_path, catalog_path, qt_app):
     controller = DesktopController(ProfileStore(tmp_path/'tasks.yml', catalog_path))
