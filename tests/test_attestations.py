@@ -88,3 +88,9 @@ def test_signed_statement_commit_must_match_certificate(monkeypatch):
     assert a.verify_attestation('{}','app.msi',DIGEST,'0.2.0',expected_commit=commit)==commit
     data['predicate']['buildDefinition']['resolvedDependencies'][0]['digest']['gitCommit']='c'*40
     with pytest.raises(a.AttestationError):a.verify_attestation('{}','app.msi',DIGEST,'0.2.0',expected_commit='c'*40)
+
+
+def test_attestation_policy_trusts_only_our_release_workflow():
+    assert a.REPOSITORY == 'https://github.com/vfunes26/Personalizado'
+    assert a.WORKFLOW == '.github/workflows/build.yml'
+    assert 'itwormz' not in a.REPOSITORY
