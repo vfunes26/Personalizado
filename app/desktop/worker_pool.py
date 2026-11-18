@@ -10,11 +10,42 @@ from PySide6.QtCore import QObject, QTimer, Signal
 from .process import DesktopController
 from .proxy_check import check_proxy
 from .proxy_profiles import ProxyProfileError
+from ..notifications import RESTRICTION_ACTION
 
 MAX_WORKERS = 10
 MODE_TEXT = {'working': 'Buscando', 'waiting': 'Esperando', 'paused': 'Pausado',
              'manual': 'CAPTCHA / intervencion manual', 'recovery': 'Recuperando', 'finished': 'Finalizado',
              'booking_handoff': 'CITA ENCONTRADA'}
+
+
+def worker_status_from_state(state):
+    """Safe, fixed status labels: no page data or personal details in the UI."""
+    mode = state.get('mode')
+    stage = state.get('stage')
+    if state.get('connection_lost'):
+        return 'Sin comunicación con el trabajador', 'danger'
+    if state.get('failed'):
+        return 'Error del trabajador — revisar diagnóstico', 'danger'
+    if state.get('paused') or mode == 'paused':
+        return 'Pausado por el usuario', 'muted'
+    if mode == 'waiting' and str(state.get('next_action', '')).startswith(RESTRICTION_ACTION):
+        return 'Restricción NIE (cod. oper) — esperando', 'attention'
+    if stage == 'server_error':
+        return ('Error del servidor — recuperando' if mode == 'recovery'
+                else 'Error temporal del servidor — esperando'), 'attention'
+    if stage == 'unknown':
+        return ('Pantalla desconocida — revisión manual' if mode == 'manual'
+                else 'Pantalla desconocida — verificando'), 'attention'
+    if stage in {'blocked', 'rate_limited'}:
+        return 'Acceso limitado por el portal — esperando', 'attention'
+    if mode == 'manual' and stage == 'auth_wait':
+        return 'Autenticación manual pendiente', 'attention'
+    text = MODE_TEXT.get(mode, 'Iniciando')
+    tone = ('success' if mode == 'booking_handoff'
+            else 'attention' if mode == 'manual'
+            else 'accent' if mode in {'working', 'waiting'}
+            else 'muted')
+    return text, tone
 
 
 def short(text, limit=70):
@@ -41,6 +72,7 @@ class WorkerSlot(QObject):
         self._last_key = None
         self._seen_fatal = set()
         self.failed_text = ''
+        self._last_status_reason = None
 
     @property
     def active(self):
@@ -64,11 +96,14 @@ class WorkerSlot(QObject):
         if self.notifier is not None and self.profile_id:
             self.notifier.observe(self.profile_id, state, self.pool.language())
         mode = state.get('mode')
-        lost = bool(state.get('connection_lost'))
-        text = 'Conexion con el trabajador perdida' if lost else MODE_TEXT.get(mode, 'Iniciando')
-        tone = 'danger' if lost or mode == 'recovery' else 'success' if mode == 'booking_handoff' \
-            else 'attention' if mode == 'manual' else 'accent' if mode in {'working', 'waiting'} else 'muted'
+        text, tone = worker_status_from_state(state)
         was_manual = self.manual
+        # Record only category transitions and never any raw server response.
+        exceptional = text if tone in {'danger', 'attention'} and text != MODE_TEXT.get(mode) else None
+        if exceptional != self._last_status_reason:
+            self._last_status_reason = exceptional
+            if exceptional:
+                self.log('ESTADO: ' + exceptional)
         key = (state.get('screen', ''), state.get('evidence', ''))
         if key != self._last_key and any(key):
             self._last_key = key
@@ -76,8 +111,12 @@ class WorkerSlot(QObject):
         if mode == 'booking_handoff' and self.status != text:
             self.log('CITA ENCONTRADA: elige oficina y hora y confirma en la ventana de Camoufox de este trabajador.')
         if mode == 'manual' and not was_manual:
-            self.log('El trabajador se detuvo y espera: resuelve el CAPTCHA/verificacion a mano. '
-                     'Pulsa «Camoufox» en esta fila para traer su ventana al frente.')
+            if state.get('stage') == 'unknown':
+                self.log('Revisión manual: pantalla desconocida. Comprueba Camoufox antes de continuar.')
+            elif state.get('stage') == 'auth_wait':
+                self.log('Autenticación manual pendiente. Comprueba la ventana de Camoufox.')
+            else:
+                self.log('Se necesita intervención manual. Pulsa «Camoufox» para revisar esa ventana.')
         for row in state.get('journal', []):
             if row.get('event') == 'fatal_error' and row.get('id') not in self._seen_fatal:
                 self._seen_fatal.add(row.get('id'))
@@ -185,6 +224,7 @@ class WorkerPool(QObject):
                 local_owner = row['index']
             slot.profile_id, slot.proxy_id, slot.proxy, slot.cancelled = profile_id, proxy_id, proxy, False
             slot._last_key, slot._seen_fatal, slot.failed_text = None, set(), ''
+            slot._last_status_reason = None
             if proxy:
                 slot.set_status('Comprobando proxy', 'attention')
                 slot.log(f'Comprobando proxy «{proxy["label"]}» ({proxy["server"]})...')
