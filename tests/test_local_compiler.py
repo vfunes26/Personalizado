@@ -97,6 +97,8 @@ def test_cleanup_runs_separately_after_manual_test_and_preserves_dependencies():
     assert 'copy /Y "%~dp0scripts\\limpiar_portable.ps1"' in cleaner_bat
     assert 'copy /Y "%~dp0CompilarPortable.bat"' in cleaner_bat
     assert 'call "%RAIZ%\\CompilarPortable.bat" /limpiar' in cleaner_bat
+    assert 'start "" "%RAIZ%\\CompilarPortable.bat" /limpiar' in cleaner_bat
+    assert cleaner_bat.index('start ""') < cleaner_bat.index('call "%RAIZ%')
     assert 'python -m' not in cleaner_bat.lower()
     assert "Join-Path $compilaciones 'Paquetes'" in cleanup
     assert "'FuentesGitHub','ExtraerFinal16'" in cleanup
