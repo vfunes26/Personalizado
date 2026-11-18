@@ -5,3 +5,5 @@ Cobertura: BAT de compilación local, Camoufox y FPGen offline, respaldo AES-GCM
 No se compila Windows en Actions, no se descargan modelos ni se publica release
 
 Corrección Windows MAX_PATH 2026-11-18: compilar desde CitaHelper\\s\\<sha12>, mantener ZIP cache; pruebas de regresión
+
+Validación de la compilación manual offline y limpieza segura 2026-11-18: nuevos BAT, migración, hashes y protección de datos.
