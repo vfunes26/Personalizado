@@ -15,6 +15,7 @@ from urllib.request import Request, urlopen
 
 from PySide6.QtCore import QObject,QThread,Signal
 from ..attestations import verify_attestation, MAX_BUNDLE, AttestationError, REPOSITORY
+from .resumable_download import DownloadNetworkError, discard_partial, fetch_package
 
 API_ROOT='https://api.github.com/repos/'+REPOSITORY.removeprefix('https://github.com/')
 API=API_ROOT+'/releases/latest'
@@ -90,8 +91,16 @@ def select_release(data,current,target,arch,*,portable=False):
     return Release(version,name,package['browser_download_url'],sums['browser_download_url'],size,proof['browser_download_url'])
 
 
-def fetch(url):
-    return urlopen(Request(url,headers={'User-Agent':'Extranjeria-Cita-Helper','Accept':'application/vnd.github+json' if url.startswith('https://api.github.com/') else 'application/octet-stream'}),timeout=10,context=ssl.create_default_context(cafile=certifi.where()))
+def fetch(url, *, headers=None):
+    request_headers = {'User-Agent': 'Extranjeria-Cita-Helper',
+                       'Accept': ('application/vnd.github+json'
+                                  if url.startswith('https://api.github.com/')
+                                  else 'application/octet-stream'),
+                       'Accept-Encoding': 'identity'}
+    if headers:
+        request_headers.update(headers)
+    return urlopen(Request(url, headers=request_headers),
+                   timeout=20, context=ssl.create_default_context(cafile=certifi.where()))
 
 
 def checksum_for(data,name):
@@ -118,39 +127,36 @@ def release_commit(version, fetch):
 
 
 def download_release(release,directory,cancel,*,fetch=fetch,progress=lambda value:None):
+    """Resume only checksum-pinned bytes; attest before publishing the file."""
     if cancel.is_set():raise InterruptedError('Download cancelled')
     with fetch(release.sums_url) as response:
         sums=response.read(16385)
     if len(sums)>16384:raise ValueError('Checksum file too large')
     digest=checksum_for(sums,release.name)
     directory=Path(directory);directory.mkdir(parents=True,exist_ok=True)
-    destination=directory/release.name;partial=directory/(release.name+'.part')
-    actual=hashlib.sha256();count=0
+    destination=directory/release.name
+    partial=fetch_package(release,directory,digest,cancel,fetch=fetch,progress=progress)
+    if cancel.is_set():raise InterruptedError('Download cancelled')
+    commit=release_commit(release.version,fetch)
     try:
-        with fetch(release.url) as response,partial.open('wb') as output:
-            while True:
-                if cancel.is_set():raise InterruptedError('Download cancelled')
-                chunk=response.read(1024*1024)
-                if not chunk:break
-                count+=len(chunk)
-                if count>release.size or count>MAX_PACKAGE:raise ValueError('Package is too large')
-                actual.update(chunk);output.write(chunk);progress(int(count*100/release.size))
-        if count!=release.size or actual.hexdigest()!=digest:
-            raise ValueError('Package checksum mismatch')
-        commit=release_commit(release.version,fetch)
-        try:
-            with fetch(release.attestation_url) as response:proof=response.read(MAX_BUNDLE+1)
-        except HTTPError as exc:raise AttestationError('Update provenance is unavailable') from exc
-        verify_attestation(proof,release.name,actual.hexdigest(),release.version,expected_commit=commit)
-        if cancel.is_set():raise InterruptedError('Download cancelled')
+        with fetch(release.attestation_url) as response:proof=response.read(MAX_BUNDLE+1)
+    except HTTPError as exc:raise AttestationError('Update provenance is unavailable') from exc
+    if len(proof)>MAX_BUNDLE:
+        discard_partial(directory,release.name)
+        raise AttestationError('Update provenance is too large')
+    try:
+        verify_attestation(proof,release.name,digest,release.version,expected_commit=commit)
         receipt=dict(version=release.version,commit=commit,bundle=json.loads(proof))
-        destination.with_name(destination.name+'.provenance.json').write_text(json.dumps(receipt),encoding='utf-8')
-        os.replace(partial,destination)
-        destination.with_name(destination.name+'.sha256').write_text(digest+'  '+destination.name+'\n')
-        return destination
-    finally:
-        partial.unlink(missing_ok=True)
-
+    except (AttestationError,ValueError,TypeError):
+        # An unsigned or mismatched build is never reused as a cached update.
+        discard_partial(directory,release.name)
+        raise
+    if cancel.is_set():raise InterruptedError('Download cancelled')
+    destination.with_name(destination.name+'.provenance.json').write_text(json.dumps(receipt),encoding='utf-8')
+    os.replace(partial,destination)
+    destination.with_name(destination.name+'.sha256').write_text(digest+'  '+destination.name+'\\n')
+    directory.joinpath(release.name+'.part.json').unlink(missing_ok=True)
+    return destination
 
 def verify_download(path):
     path=Path(path)
@@ -175,6 +181,7 @@ class UpdateJob(QThread):
         try:self.result.emit(self.operation(self))
         except InterruptedError:self.failed.emit('cancelled')
         except AttestationError:self.failed.emit('provenance')
+        except DownloadNetworkError:self.failed.emit('network_download')
         except HTTPError as exc:self.failed.emit('no_release' if exc.code==404 else 'network')
         except Exception:self.failed.emit('failed')
 
