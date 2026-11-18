@@ -129,7 +129,7 @@ class ProfileStore:
             raise ProfileConflictError('Профиль больше не существует. Обнови список.')
         task = copy.deepcopy(existing or {})
         profile_id = profile_id or 'person_' + uuid.uuid4().hex[:12]
-        for key in ('label', 'request', 'applicant', 'timings', 'notifications'):
+        for key in ('label', 'request', 'applicant', 'timings', 'notifications', 'telegram_owner_chat_id'):
             if key in fields:
                 if isinstance(fields[key], dict):
                     task.setdefault(key, {}).update(copy.deepcopy(fields[key]))

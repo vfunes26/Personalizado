@@ -39,10 +39,14 @@ PROFILE_LIST_SECONDS = 600
 class Source:
     """Telegram connection used by the inbox (token + chats that are allowed)."""
 
-    def __init__(self, profile_id, token, recipients, events):
+    def __init__(self, profile_id, token, recipients, events, owner_id=''):
         self.profile_id, self.token = profile_id, token
         self.recipients = tuple(copy.deepcopy(r) for r in recipients)
         self.events = tuple(events)
+        self.owner_id = str(owner_id or '')
+
+    def is_owner(self, chat_id):
+        return bool(self.owner_id and str(chat_id) == self.owner_id)
 
     @property
     def allowed_chats(self):
@@ -50,7 +54,19 @@ class Source:
 
 
 def find_source(store, vault, preferred_id=None):
-    """First profile with Telegram enabled, a token and at least one private recipient."""
+    """Prefer global administrator; retain old profile source until configured."""
+    from .desktop.telegram_global import TelegramGlobalStore, TelegramGlobalError
+    try:
+        global_credentials = TelegramGlobalStore(store.path.parent, vault=vault).credentials()
+    except TelegramGlobalError:
+        # Never fall back to a different bot after a global config was created.
+        raise
+    if global_credentials:
+        owner = global_credentials['owner_chat_id']
+        ids = [owner] + [x for x in global_credentials['authorized_chat_ids'] if x != owner]
+        recipients = [dict(id=id_, label='ID autorizado', type='private', username='')
+                      for id_ in ids]
+        return Source(None, global_credentials['token'], recipients, EVENTS, owner_id=owner)
     tasks = store.load()
     ordered = sorted(tasks, key=lambda t: (t.id != preferred_id,))
     for task in ordered:
@@ -93,7 +109,11 @@ class TelegramInbox:
     # ------------------------------------------------------------------ setup
     def prepare(self):
         """Resolve token/chats. Returns False (with ``disabled_reason``) if the inbox cannot run."""
-        source = find_source(self.store, self.vault)
+        try:
+            source = find_source(self.store, self.vault)
+        except ValueError as exc:
+            self.disabled_reason = str(exc)
+            return False
         if source is None:
             self.disabled_reason = 'Conecte un destinatario de Telegram en un perfil (Notificaciones) para usar el buzón.'
             return False
@@ -180,9 +200,30 @@ class TelegramInbox:
         self.client.send(chat_id, text[:4000])
         return True
 
+    def _visible_tasks(self, chat_id, tasks):
+        if not self.source or not self.source.owner_id or self.source.is_owner(chat_id):
+            return tasks
+        permitted = []
+        for task in tasks:
+            try:
+                origin = self.store.raw_profile(task.id).get('telegram_owner_chat_id', '')
+            except (ValueError, StopIteration):
+                continue
+            if origin == str(chat_id):
+                permitted.append(task)
+        return permitted
+
+    def _notify_owner(self, chat_id, text):
+        if not self.source or not self.source.owner_id or self.source.is_owner(chat_id):
+            return
+        try:
+            self.client.send(self.source.owner_id, text)
+        except NotificationError:
+            log.warning('telegram_inbox_owner_notice_failed')
+
     def _profiles_text(self, chat_id=None):
         try:
-            tasks = self.store.load()
+            tasks = self._visible_tasks(chat_id, self.store.load())
             revision = self.store.revision()
         except ValueError:
             return 'No se pudo leer la lista de perfiles.'
@@ -209,7 +250,7 @@ class TelegramInbox:
             self.listings.pop(chat_id, None)
             return self._reply(chat_id, 'Primero envía /perfiles para obtener una lista actualizada.')
         try:
-            tasks = self.store.load()
+            tasks = self._visible_tasks(chat_id, self.store.load())
             revision = self.store.revision()
             saved_rev, saved_ids, _shown_at = listing
             if saved_rev != revision or saved_ids != tuple(t.id for t in tasks):
@@ -290,6 +331,8 @@ class TelegramInbox:
             return self._reply(chat_id, 'Confirmación caducada. Envía /perfiles y vuelve a solicitarla.')
         if self.source and pending['profile_id'] == self.source.profile_id:
             return self._reply(chat_id, 'No se puede borrar el perfil que mantiene conectado el bot.')
+        if pending['profile_id'] not in {t.id for t in self._visible_tasks(chat_id, self.store.load())}:
+            return self._reply(chat_id, 'No tienes permiso para eliminar ese perfil.')
         try:
             result = self.deletion_service.delete(
                 pending['profile_id'], revision=pending['revision'],
@@ -302,6 +345,7 @@ class TelegramInbox:
                   'El correo no pudo enviarse; consulta la auditoría local.')
         if result['warnings']:
             suffix += ' Algunas asignaciones locales requieren revisión.'
+        self._notify_owner(chat_id, '🗑 Perfil eliminado por un ID autorizado: «' + pending['label'] + '».')
         return self._reply(chat_id, '✅ Perfil eliminado: «' + pending['label'] + '».\n' + suffix)
 
     def _submission(self, chat_id, message, text):
@@ -316,7 +360,8 @@ class TelegramInbox:
             if duplicate:
                 self._reply(chat_id, f'ℹ Ya existe un perfil con ese documento, trámite, provincia y acceso: «{duplicate}». No se creó otro.')
                 return True
-            profile_id = self._create(result.fields)
+            profile_id = self._create(result.fields, chat_id=chat_id)
+            self._notify_owner(chat_id, '✅ Nuevo perfil creado por ID autorizado: «' + result.fields.get('label', '') + '».')
             extra = ('\n\n' + '\n'.join('ℹ ' + w for w in result.warnings)) if result.warnings else ''
             self._reply(chat_id, '✅ Perfil creado\n\n' + (result.full_summary or result.summary) + extra
                         + '\n\nYa aparece en la app. Inicie la búsqueda desde allí (Seguimiento → Iniciar).')
@@ -344,13 +389,23 @@ class TelegramInbox:
                 return task.label
         return None
 
-    def _create(self, fields):
-        """Save with its own copy of the token so deleting one profile never breaks another."""
+    def _create(self, fields, *, chat_id=None):
+        """Only owner and the actual creator receive this profile's alerts."""
         reference = self.vault.put({'token': self.source.token})
+        recipients = []
+        if self.source.owner_id:
+            recipients.append(dict(id=self.source.owner_id, label='Principal', type='private'))
+            if chat_id and str(chat_id) != self.source.owner_id:
+                recipients.append(dict(id=str(chat_id), label='Creador', type='private',
+                                       events=['office', 'booking']))
+        else:
+            recipients = copy.deepcopy(list(self.source.recipients))
         notifications = {'telegram': {'enabled': True, 'events': list(EVENTS),
-                                      'recipients': copy.deepcopy(list(self.source.recipients)),
+                                      'recipients': recipients,
                                       'secret_ref': reference}}
         payload = dict(fields, notifications=notifications)
+        if self.source.owner_id:
+            payload['telegram_owner_chat_id'] = str(chat_id or self.source.owner_id)
         try:
             for attempt in range(2):
                 try:
