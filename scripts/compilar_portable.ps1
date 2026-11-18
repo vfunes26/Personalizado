@@ -242,7 +242,7 @@ print('Camoufox, FPGen y dependencias: disponibles SIN descargar.')
             Avisar 'Verificando que la compilacion anterior este cerrada...'
             $running = @(Get-CimInstance -ClassName Win32_Process -Filter "Name='Cita Extranjeria Helper.exe'" | Where-Object {
                 $_.ExecutablePath -and $_.ExecutablePath.StartsWith(
-                    $ready + '\\', [StringComparison]::OrdinalIgnoreCase)
+                    $ready + '\', [StringComparison]::OrdinalIgnoreCase)
             })
             if ($running.Count -gt 0) {
                 throw 'Cierra el portable compilado anterior antes de conservar sus datos.'
