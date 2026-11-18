@@ -1,5 +1,5 @@
 Validación aprobada por rondas de ajustes
-Ajustes: 9 y 10
-Tipo: Tests — pruebas unitarias y de interfaz Qt en modo offscreen
-Objetivo: /perfiles, /borrar N, confirmaciones, eliminación por interfaz, auditoría y Gmail
-Sin compilación portable ni publicación de releases
+Ajustes: 11 y 12
+Tipo: Tests — pruebas unitarias y UI Qt offscreen
+Objetivo: seguridad en eliminación Telegram, recibos Gmail y origen de actualizaciones Personalizado
+Sin compilación portable, tags ni publicación de releases
