@@ -15,3 +15,5 @@ Prueba final: LimpiarPortable.bat permite limpieza directa desde ZIP sin compila
 Revalidación final del PowerShell 5.1: separadores únicos en pruebas de rutas, fuente y limpiador.
 
 Verificación final de comillas de Windows en -Proyecto para carpeta ZIP con barra final.
+
+Validación de cierre: liberar BAT del ZIP en nueva consola antes de eliminar fuente, sin borrar datos privados.
