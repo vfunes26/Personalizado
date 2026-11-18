@@ -148,8 +148,13 @@ print('Camoufox, FPGen y dependencias: disponibles SIN descargar.')
 
     $sourceCache = Join-Path $root 'CacheCompilacion\FuentesGitHub'
     $sourceZip = Join-Path $sourceCache ('Personalizado-' + $sha + '.zip')
-    $expanded = Join-Path $sourceCache ('Personalizado-' + $sha)
-    New-Item -ItemType Directory -Force -Path $sourceCache, $builds | Out-Null
+    # PyInstaller COLLECT uses legacy Windows path handling in some libraries.
+    # A repeated 40-character GitHub SHA under a long cache folder causes
+    # FileNotFoundError when collecting cryptography's nested SBOM files.
+    # Keep the downloaded ZIP in cache, but build from a SHORT source path.
+    $shortSourceRoot = Join-Path $root 's'
+    $expanded = Join-Path $shortSourceRoot $sha.Substring(0, 12)
+    New-Item -ItemType Directory -Force -Path $sourceCache, $builds, $shortSourceRoot | Out-Null
     if (-not (Test-Path -LiteralPath $sourceZip -PathType Leaf)) {
         Avisar 'Descargando solo el codigo fuente (sin navegador ni modelos)...'
         $url = 'https://github.com/vfunes26/Personalizado/archive/' + $sha + '.zip'
@@ -183,6 +188,10 @@ print('Camoufox, FPGen y dependencias: disponibles SIN descargar.')
         throw 'El ZIP no contiene una unica estructura de proyecto valida.'
     }
     $source = $sources[0].FullName
+    if ($source.Length -gt 120) {
+        throw 'Ruta de compilacion demasiado larga. Es necesario usar CitaHelper cerca de la raiz del disco.'
+    }
+    Avisar ('Ruta corta de compilacion: ' + $source)
     $versionLine = Select-String -LiteralPath (Join-Path $source 'app\version.py') -Pattern '^VERSION\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"' | Select-Object -First 1
     if ($null -eq $versionLine) { throw 'La version de codigo no es valida.' }
     $version = $versionLine.Matches[0].Groups[1].Value
