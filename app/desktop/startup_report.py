@@ -115,7 +115,7 @@ def worker_exit_summary(code, stderr):
             kind = 'BrowserLaunchError'
     summary = f'Worker exit {int(code)}: {kind}'
     missing = re.search(
-        r"ModuleNotFoundError: No module named ['\\"]([A-Za-z_][A-Za-z0-9_.]*)['\\"]",
+        r"""ModuleNotFoundError: No module named ['"]([A-Za-z_][A-Za-z0-9_.]*)['"]""",
         stderr,
     )
     if missing:
