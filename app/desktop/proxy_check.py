@@ -96,6 +96,19 @@ def _socks5(sock, username, password):
     return True, 'Proxy operativo'
 
 
+def _validate_destination_tls(sock):
+    """Verify the portal's TLS certificate through the established proxy tunnel.
+
+    Never disable hostname verification or permit an untrusted issuer. The
+    browser uses its own trust store, so its result may still differ.
+    """
+    secured = ssl.create_default_context().wrap_socket(sock, server_hostname=TARGET_HOST)
+    try:
+        return True, 'Tunel y certificado HTTPS del portal verificados'
+    finally:
+        secured.close()
+
+
 def check_proxy(server, username='', password='', timeout=8.0):
     """Devuelve (ok, detalle). Nunca lanza excepciones."""
     try:
@@ -119,10 +132,23 @@ def check_proxy(server, username='', password='', timeout=8.0):
     try:
         raw.settimeout(timeout)
         if scheme == 'socks5':
-            return _socks5(raw, username or '', password or '')
+            ok, detail = _socks5(raw, username or '', password or '')
+        else:
+            if scheme == 'https':
+                sock = ssl.create_default_context().wrap_socket(raw, server_hostname=host)
+            ok, detail = _http_connect(sock, username or '', password or '')
+        if not ok:
+            return False, detail
         if scheme == 'https':
-            sock = ssl.create_default_context().wrap_socket(raw, server_hostname=host)
-        return _http_connect(sock, username or '', password or '')
+            # Python ssl cannot wrap an SSLSocket as another SSLSocket. Do not
+            # claim that testing the TLS connection to the proxy tested the
+            # destination certificate too (TLS-in-TLS is different).
+            return True, 'Tunel operativo; certificado HTTPS del portal no verificado (proxy HTTPS)'
+        return _validate_destination_tls(sock)
+    except ssl.SSLCertVerificationError:
+        return False, 'Certificado HTTPS no confiable o no valido (posible proxy interceptando TLS)'
+    except ssl.SSLError:
+        return False, 'No se pudo establecer TLS valido a traves del proxy'
     except socket.timeout:
         return False, f'El proxy {host}:{port} no respondio a tiempo'
     except (OSError, ssl.SSLError, ValueError) as exc:
