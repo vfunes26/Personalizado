@@ -97,7 +97,7 @@ def test_cleanup_runs_separately_after_manual_test_and_preserves_dependencies():
     assert 'copy /Y "%~dp0scripts\\limpiar_portable.ps1"' in cleaner_bat
     assert 'copy /Y "%~dp0CompilarPortable.bat"' in cleaner_bat
     assert 'call "%RAIZ%\\CompilarPortable.bat" /limpiar' in cleaner_bat
-    assert 'start "" "%RAIZ%\\CompilarPortable.bat" /limpiar' in cleaner_bat
+    assert 'start "" /D "%RAIZ%" "%RAIZ%\\CompilarPortable.bat" /limpiar' in cleaner_bat
     assert cleaner_bat.index('start ""') < cleaner_bat.index('call "%RAIZ%')
     assert 'python -m' not in cleaner_bat.lower()
     assert "Join-Path $compilaciones 'Paquetes'" in cleanup
@@ -137,3 +137,27 @@ def test_cleanup_releases_extracted_source_directory_before_removal():
     cleanup_branch = launcher.split('\n:limpiar\n', 1)[1].split('\n:resultado\n', 1)[0]
     assert 'cd /d "%RAIZ%"' in cleanup_branch
     assert cleanup_branch.index('cd /d "%RAIZ%"') < cleanup_branch.index('powershell.exe')
+
+
+def test_manual_cleanup_preserves_empty_source_container_and_checks_backups():
+    cleanup = (ROOT / 'scripts/limpiar_portable.ps1').read_text(encoding='utf-8')
+    assert 'function VaciarFuenteManual' in cleanup
+    assert "Join-Path $proyecto 'Personalizado-final'" in cleanup
+    assert 'VaciarFuenteManual $root' in cleanup
+    assert 'foreach ($item in $contenido) { EliminarSeguro $item.FullName $root }' in cleanup
+    assert 'function RespaldoDuplicado' in cleanup
+    assert 'Get-FileHash -LiteralPath $archivo.FullName -Algorithm SHA256' in cleanup
+    assert 'Respaldo PROTEGIDO por datos no verificados' in cleanup
+    assert "'Personalizado-final') { continue }" in cleanup
+
+
+def test_compiler_checks_offline_lock_before_staging_new_build():
+    control = (ROOT / 'scripts/compilar_portable.ps1').read_text(encoding='utf-8')
+    assert 'check_local_dependencies.py' in control
+    assert 'EjecutarPython $python @($guard' in control
+    assert control.index('EjecutarPython $python @($guard') < control.index(
+        'CopiarFuentes $manualSource $source')
+    guard = (ROOT / 'scripts/check_local_dependencies.py').read_text(encoding='utf-8')
+    assert 'tomllib.load(stream)' in guard
+    assert 'metadata.version' in guard
+    assert 'urlopen' not in guard
