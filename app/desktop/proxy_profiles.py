@@ -11,14 +11,51 @@ import uuid
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from .notification_store import NotificationVault
+from ..notifications import NotificationError
+
+
+class ProxyCredentialVault(NotificationVault):
+    """Native OS credential manager; never falls back to a local secret file."""
+    SERVICE = "Cita Extranjeria Helper proxy credentials"
+
+    def put(self, credentials):
+        try:
+            reference = super().put(credentials)
+            if self.get(reference) != credentials:
+                raise ProxyProfileError("No se verificaron las credenciales guardadas.")
+            return reference
+        except (NotificationError, ProxyProfileError):
+            raise ProxyProfileError(
+                "No se pudo guardar el proxy en el gestor de credenciales del sistema."
+            ) from None
+
+    def get(self, reference):
+        try:
+            credentials = super().get(reference)
+        except NotificationError:
+            raise ProxyProfileError(
+                "No se pudieron leer las credenciales del proxy. "
+                "Comprueba el gestor de credenciales de Windows."
+            ) from None
+        if not isinstance(credentials, dict):
+            raise ProxyProfileError("Las credenciales del proxy no son validas.")
+        username = credentials.get("username")
+        password = credentials.get("password")
+        if not isinstance(username, str) or not isinstance(password, str) or not username or not password:
+            raise ProxyProfileError("Las credenciales del proxy guardadas son invalidas.")
+        return {"username": username, "password": password}
+
+
 
 class ProxyProfileError(ValueError):
     """Invalid proxy profile configuration."""
 
 
 class ProxyProfileStore:
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, vault=None):
         self.path = Path(path)
+        self.vault = vault if vault is not None else ProxyCredentialVault()
 
     @staticmethod
     def _empty():
@@ -60,6 +97,65 @@ class ProxyProfileStore:
             "proxy_profiles": copy.deepcopy(proxy_profiles),
             "assignments": copy.deepcopy(assignments),
         }
+
+
+    def _migrate_legacy(self, raw):
+        """Atomically migrate legacy plaintext to verified native secrets.
+
+        If any vault write fails, the original JSON is left unchanged.
+        """
+        created = []
+        changed = False
+        try:
+            for item in raw["proxy_profiles"]:
+                if "username" not in item and "password" not in item:
+                    continue
+                username = str(item.get("username", "") or "")
+                password = str(item.get("password", "") or "")
+                if bool(username) != bool(password):
+                    raise ProxyProfileError("Credenciales de proxy antiguas incompletas.")
+                if username:
+                    if item.get("secret_ref"):
+                        # A partial migration is never treated as an unverified secret.
+                        if self.vault.get(item["secret_ref"]) != {
+                            "username": username, "password": password
+                        }:
+                            raise ProxyProfileError("Las credenciales proxy no coinciden.")
+                    else:
+                        reference = self.vault.put({"username": username, "password": password})
+                        created.append(reference)
+                        item["secret_ref"] = reference
+                item.pop("username", None)
+                item.pop("password", None)
+                changed = True
+            if changed:
+                self._write(raw)
+        except Exception:
+            # The old plaintext file is still present when an atomic write fails.
+            for reference in created:
+                self.vault.delete(reference)
+            raise
+
+    def _hydrate(self, raw):
+        """Return a memory-only copy for the existing GUI and worker interfaces."""
+        hydrated = copy.deepcopy(raw)
+        for item in hydrated["proxy_profiles"]:
+            reference = item.get("secret_ref")
+            if reference:
+                credentials = self.vault.get(reference)
+                item.update(credentials)
+            else:
+                item["username"] = ""
+                item["password"] = ""
+        return hydrated
+
+    def _locked_read(self):
+        from ..locking import locked_file
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with locked_file(self.path.with_name("." + self.path.name + ".lock")):
+            raw = self._read()
+            self._migrate_legacy(raw)
+            return self._hydrate(raw)
 
     @staticmethod
     def validate_endpoint(server):
@@ -127,7 +223,7 @@ class ProxyProfileStore:
         }
 
     def load(self):
-        return self._read()
+        return self._locked_read()
 
     def save_proxy_profile(self, profile_id, fields):
         normalized = self._validate_profile(fields)
@@ -141,6 +237,7 @@ class ProxyProfileStore:
 
         with locked_file(self.path.with_name("." + self.path.name + ".lock")):
             raw = self._read()
+            self._migrate_legacy(raw)
             profiles = raw["proxy_profiles"]
 
             existing = next(
@@ -151,16 +248,31 @@ class ProxyProfileStore:
             profile_id = profile_id or "proxy_" + uuid.uuid4().hex[:12]
 
             normalized["id"] = profile_id
+            username = normalized.pop("username")
+            password = normalized.pop("password")
+            new_ref = None
+            if username:
+                old_ref = existing.get("secret_ref") if existing else None
+                old_credentials = self.vault.get(old_ref) if old_ref else None
+                if old_credentials == {"username": username, "password": password}:
+                    normalized["secret_ref"] = old_ref
+                else:
+                    new_ref = self.vault.put({"username": username, "password": password})
+                    normalized["secret_ref"] = new_ref
 
-            if existing is None:
-                if len(profiles) >= 10:
-                    raise ProxyProfileError("Limite alcanzado: maximo 10 proxies.")
-                profiles.append(normalized)
-            else:
-                profiles[profiles.index(existing)] = normalized
-
-            self._write(raw)
-
+            try:
+                if existing is None:
+                    if len(profiles) >= 10:
+                        raise ProxyProfileError("Limite alcanzado: maximo 10 proxies.")
+                    profiles.append(normalized)
+                else:
+                    profiles[profiles.index(existing)] = normalized
+                self._write(raw)
+            except Exception:
+                if new_ref:
+                    self.vault.delete(new_ref)
+                raise
+            # Old references are retained for previous portable backups.
         return profile_id
 
     def delete_proxy_profile(self, profile_id):
@@ -170,6 +282,7 @@ class ProxyProfileStore:
 
         with locked_file(self.path.with_name("." + self.path.name + ".lock")):
             raw = self._read()
+            self._migrate_legacy(raw)
 
             raw["proxy_profiles"] = [
                 item
@@ -206,6 +319,7 @@ class ProxyProfileStore:
 
         with locked_file(self.path.with_name("." + self.path.name + ".lock")):
             raw = self._read()
+            self._migrate_legacy(raw)
 
             known_proxy_ids = {
                 item.get("id")
@@ -235,12 +349,13 @@ class ProxyProfileStore:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with locked_file(self.path.with_name("." + self.path.name + ".lock")):
             raw = self._read()
+            self._migrate_legacy(raw)
             if request_profile_id in raw['assignments']:
                 raw['assignments'].pop(request_profile_id)
                 self._write(raw)
 
     def assignment_for(self, request_profile_id):
-        raw = self._read()
+        raw = self.load()
         assignment = raw["assignments"].get(request_profile_id, {})
 
         return {
@@ -249,7 +364,7 @@ class ProxyProfileStore:
         }
 
     def proxy_for_request(self, request_profile_id):
-        raw = self._read()
+        raw = self.load()
         assignment = raw["assignments"].get(request_profile_id, {})
 
         if not assignment.get("enabled", False):
@@ -269,6 +384,9 @@ class ProxyProfileStore:
         )
 
     def _write(self, raw):
+        if any("username" in item or "password" in item
+               for item in raw["proxy_profiles"]):
+            raise ProxyProfileError("No se permite escribir credenciales proxy en JSON.")
         fd, temporary = tempfile.mkstemp(
             prefix=".proxy-profiles-",
             dir=self.path.parent,
