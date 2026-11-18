@@ -2,9 +2,9 @@
 
 🇬🇧 [English](README.md) · 🇷🇺 [Русский](README.ru.md) · 🇪🇸 **Español**
 
-[![Última versión](https://img.shields.io/github/v/release/itwormz/extranjeria-cita-helper?sort=date&display_name=tag&label=versi%C3%B3n&color=626bdf&logo=github)](https://github.com/itwormz/extranjeria-cita-helper/releases/latest)
+[![Última versión](https://img.shields.io/github/v/release/vfunes26/Personalizado?sort=date&display_name=tag&label=versi%C3%B3n&color=626bdf&logo=github)](https://github.com/vfunes26/Personalizado/releases/latest)
 
-[Descargar](https://github.com/itwormz/extranjeria-cita-helper/releases/latest) · [Novedades](https://github.com/itwormz/extranjeria-cita-helper/releases/latest) · [Historial completo](CHANGELOG.md)
+[Descargar](https://github.com/vfunes26/Personalizado/releases/latest) · [Novedades](https://github.com/vfunes26/Personalizado/releases/latest) · [Historial completo](CHANGELOG.md)
 
 **💜 Apoyar el desarrollo**
 
@@ -24,7 +24,7 @@ Asistente para buscar citas de **Toma de huellas / TIE** y **Autorización de re
 
 ## 🚀 Inicio rápido
 
-1. [Descargue la aplicación](https://github.com/itwormz/extranjeria-cita-helper/releases/latest).
+1. [Descargue la aplicación](https://github.com/vfunes26/Personalizado/releases/latest).
 2. En **Ajustes → Crear perfil**, indique la provincia, el trámite, el método de acceso y los datos del solicitante.
 3. En **Seguimiento**, seleccione el perfil, pulse **Iniciar** e identifíquese en Camoufox.
 4. Deje el navegador abierto. Cuando reciba un aviso, elija oficina o complete la reserva.
@@ -149,7 +149,7 @@ Se verifican la autenticidad y la integridad del paquete antes de instalarlo. La
 
 Active el diagnóstico en ajustes para guardar páginas y capturas localmente. Durante la reserva manual no se toman capturas; pueden guardarse HTML, metadatos de navegación y JavaScript del sitio. La carpeta de diagnóstico se abre desde la aplicación.
 
-Si el navegador no arranca, pulse **Copiar informe** y adjúntelo a una [incidencia en GitHub](https://github.com/itwormz/extranjeria-cita-helper/issues). Elimine los datos personales antes de compartir el diagnóstico.
+Si el navegador no arranca, pulse **Copiar informe** y adjúntelo a una [incidencia en GitHub](https://github.com/vfunes26/Personalizado/issues). Elimine los datos personales antes de compartir el diagnóstico.
 
 Los datos del documento, contactos, CAPTCHA y números de confirmación no se envían en las notificaciones. [Privacidad](docs/PRIVACY.md).
 
@@ -212,7 +212,7 @@ Las versiones están fijadas en [uv.lock](uv.lock). La verificación de actualiz
 Se necesitan [Git](https://git-scm.com/install/), [uv](https://docs.astral.sh/uv/getting-started/installation/), internet y un entorno gráfico. En Windows, utilice WSL con soporte gráfico.
 
 ```sh
-git clone https://github.com/itwormz/extranjeria-cita-helper.git
+git clone https://github.com/vfunes26/Personalizado.git
 cd extranjeria-cita-helper
 uv python install 3.13
 uv sync --frozen --python 3.13 --extra desktop
