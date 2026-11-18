@@ -438,6 +438,8 @@ class DesktopWindow(QMainWindow):
         self.fields={};self.profile_grid=grid
         self._document_drafts={};self._document_kind='NIE';self._regreso_document_type='NIE'
         self._editor_procedure=TIE_PROCEDURE;self._identity_layout_service=None
+        from .appointment_catalog import AppointmentCatalog
+        self.appointment_catalog=AppointmentCatalog()
         fields=[('label','Название профиля'),('province','Провинция'),('procedure','Услуга'),('access_mode','Способ авторизации'),('office','Oficina de cita'),
                 ('fill_mode','NIE и имя'),('document_type','Документ'),('document_number','NIE'),('full_name','Имя и фамилия'),
                 ('nationality','Гражданство'),('phone','Телефон'),('email','Почта'),
@@ -461,7 +463,9 @@ class DesktopWindow(QMainWindow):
                     widget.addItem('Ввести данные профиля','manual'); widget.addItem('Скопировать с сайта','copy')
                 elif key=='nationality':
                     widget.addItems(countries); widget.setPlaceholderText('Selecciona la nacionalidad')
-                elif key=='province': widget.addItems(sorted(_load_catalog(self.store.catalog_path)['provinces']))
+                elif key=='province':
+                    widget.addItems(self.appointment_catalog.province_names() if self.appointment_catalog.available
+                                    else sorted(_load_catalog(self.store.catalog_path)['provinces']))
                 elif key=='office': widget.addItem('Cualquier oficina','')
                 elif key=='document_type':
                     for text,value in [('NIE','NIE'),('DNI','DNI'),('Паспорт','PASSPORT')]:widget.addItem(text,value)
@@ -494,6 +498,7 @@ class DesktopWindow(QMainWindow):
         self.profile_field_boxes['document_type'].setFixedWidth(160)
         self.profile_focus_fields=[self.fields[key] for key in ('label','province','procedure','access_mode')]+[self.identity_buttons['copy'],self.identity_buttons['manual']]+[self.fields[key] for key in ('document_type','document_number','full_name','nationality','phone','email','office')]
         self.fields['province'].currentIndexChanged.connect(self.refresh_office_choices)
+        self.fields['office'].currentIndexChanged.connect(self.refresh_procedure_choices)
         self.fields['procedure'].currentIndexChanged.connect(self.update_profile_document)
         self.fields['document_type'].currentIndexChanged.connect(self.update_profile_document)
         self.fields['access_mode'].currentIndexChanged.connect(self.update_identity_fields)
@@ -843,30 +848,56 @@ class DesktopWindow(QMainWindow):
         for previous,current in zip(self.profile_focus_fields,self.profile_focus_fields[1:]):
             QWidget.setTabOrder(previous,current)
 
-    def refresh_office_choices(self, *_args, selected=None):
-        """Exact local labels, without inventing offices absent from the snapshot."""
-        import json
-        choice=self.fields['office']
+    def refresh_office_choices(self, *_args, selected=None, selected_procedure=None):
+        """Provincial offices in the supplied source; never rewrite official labels."""
+        selector=self.fields['office']
         province=self.fields['province'].currentText()
-        previous=choice.currentData() if selected is None else selected
+        previous=selector.currentData() if selected is None else selected
         names=[]
-        if province=='Barcelona':
-            try:
-                snapshot=json.loads(Path(self.store.catalog_path).read_text(encoding='utf-8'))
-                names=[item['label'] for item in snapshot['selectors']['barcelona_offices']['options']]
-            except (OSError,ValueError,TypeError,KeyError):
-                names=[]
-        choice.blockSignals(True)
-        choice.clear()
-        choice.addItem('Cualquier oficina','')
+        if self.appointment_catalog.available:
+            names=list(dict.fromkeys(name for _id,name in self.appointment_catalog.offices(province)))
+        elif province=='Barcelona':
+            names=list(_load_catalog(self.store.catalog_path).get('barcelona_offices',()))
+        selector.blockSignals(True)
+        selector.clear()
+        selector.addItem('Cualquier oficina','')
         for name in names:
             if name!='Cualquier oficina':
-                choice.addItem(name,name)
-        if previous and choice.findData(previous)<0:
-            choice.addItem(previous+' (preferencia antigua; no verificada)',previous)
-        choice.setCurrentIndex(max(0,choice.findData(previous or '')))
-        choice.blockSignals(False)
-        choice.setToolTip('Catálogo de oficinas verificable solo para Barcelona; otras provincias: Cualquier oficina.')
+                selector.addItem(name,name)
+        if previous and selector.findData(previous)<0 and selected is not None:
+            selector.addItem(previous+' (oficina de un perfil anterior)',previous)
+        selector.setCurrentIndex(max(0,selector.findData(previous or '')))
+        selector.blockSignals(False)
+        selector.setToolTip('Oficinas del catálogo aportado, versión 12/09/2026; no verifica disponibilidad en tiempo real.')
+        self.refresh_procedure_choices(selected=selected_procedure)
+
+    def refresh_procedure_choices(self, *_args, selected=None):
+        """Only list procedures for the province and chosen office."""
+        selector=self.fields['procedure']
+        preferred=selector.currentData() if selected is None else selected
+        province=self.fields['province'].currentText()
+        office=self.fields['office'].currentData() or ''
+        options=[]
+        if self.appointment_catalog.available:
+            options=list(self.appointment_catalog.procedures(province,office))
+        else:
+            options=[(name,value,'') for value,name in PROCEDURE_NAMES.items()]
+        selector.blockSignals(True)
+        selector.clear()
+        for name,value,code in options:
+            selector.addItem(name,value)
+            selector.setItemData(selector.count()-1,
+                                 f'Código del catálogo: {code}. Solo TIE y Regreso están automatizados.',
+                                 Qt.ItemDataRole.ToolTipRole)
+        # Keep a saved historical value editable even when the snapshot changed.
+        if selected is not None and preferred and selector.findData(preferred)<0:
+            selector.addItem(PROCEDURE_NAMES.get(preferred,preferred)+' (perfil anterior)',preferred)
+        index=selector.findData(preferred)
+        if index<0:
+            index=selector.findData(TIE_PROCEDURE)
+        selector.setCurrentIndex(max(0,index))
+        selector.blockSignals(False)
+        self.update_profile_document()
 
     def create_profile(self):
         if len(getattr(self, 'profiles', [])) >= 10:
@@ -1440,7 +1471,8 @@ class DesktopWindow(QMainWindow):
         self.fields['nationality'].setCurrentIndex(-1)
         self.fields['nationality'].setCurrentText(applicant.get('nationality',''))
         self.fields['province'].setCurrentText(raw.get('request',{}).get('province','Barcelona'))
-        self.refresh_office_choices(selected=raw.get('request',{}).get('office',''))
+        self.refresh_office_choices(selected=raw.get('request',{}).get('office',''),
+                                    selected_procedure=procedure)
         access=raw.get('request',{}).get('access_mode','certificate')
         if access=='clave':
             access='clave_'+raw.get('request',{}).get('clave_method','movil')
@@ -1469,6 +1501,12 @@ class DesktopWindow(QMainWindow):
 
     def save_profile(self):
         f=self.fields
+        if f['procedure'].currentData() not in PROCEDURE_NAMES:
+            self.form_error.setText(
+                'Este trámite figura en el catálogo original, pero su automatización '
+                'todavía no está implementada. Actualmente se admiten TIE y Autorización de regreso.'
+            )
+            return
         from ..timings import SEQUENCE_KEYS
         timings={"adaptive_reload_on_429": self.protection_fields["adaptive_reload_on_429"].isChecked()}
         try:

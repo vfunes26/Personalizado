@@ -77,6 +77,7 @@ def build(*, experimental_no_fonts=False, include_fonts=False, output_directory=
             '--specpath', str(work), '--paths', str(ROOT),
             '--add-data', f'{source}:app/desktop/assets',
             '--add-data', f'{ROOT / "catalogs" / "snapshot-2026-08-12.json"}:catalogs',
+            '--add-data', f'{ROOT / "catalogs" / "catalogo-extranjeria-alertas-2026-09-12.json"}:catalogs',
             '--additional-hooks-dir', str(ROOT / 'scripts' / 'pyinstaller_hooks'),
             '--exclude-module', 'PIL', '--exclude-module', 'pygments.formatters.img',
             '--collect-data', 'language_tags',

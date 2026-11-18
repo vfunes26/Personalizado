@@ -1542,7 +1542,8 @@ def test_office_selector_uses_exact_available_snapshot(window):
     from app.config import _load_catalog
     window.create_profile()
     window.fields['province'].setCurrentText('Barcelona')
-    offices=_load_catalog(window.store.catalog_path)['barcelona_offices']
+    from app.desktop.appointment_catalog import AppointmentCatalog
+    offices=[name for _id,name in AppointmentCatalog().offices('Barcelona')]
     field=window.fields['office']
     assert all(field.findText(name)>=0 for name in offices)
     assert field.itemData(0)==''
@@ -1584,4 +1585,19 @@ def test_global_bot_can_configure_profile_notifications_without_separate_token(w
     assert config['telegram']['recipients'][0]['id'] == '222'
     assert config['telegram']['secret_ref'] == ''
     assert not created
+    window.profile_editor.close()
+
+
+def test_office_limits_procedures_and_preserves_catalog_spelling(window):
+    from app.config import TIE_PROCEDURE, REGRESO_PROCEDURE
+    window.create_profile()
+    f=window.fields
+    f['province'].setCurrentText('Alicante')
+    assert f['office'].findText('CNP Alicante TIE, Campo de Mirra, 6, Alicante')>=0
+    f['office'].setCurrentText('CNP Alicante TIE, Campo de Mirra, 6, Alicante')
+    assert f['procedure'].findData(TIE_PROCEDURE)>=0
+    assert f['procedure'].findData(REGRESO_PROCEDURE)<0
+    assert f['procedure'].itemText(f['procedure'].findData(TIE_PROCEDURE)) == (
+        'POLICÍA-TOMA DE HUELLAS (EXPEDICIÓN DE TARJETA) INICIAL, RENOVACIÓN, DUPLICADO Y LEY 14/2013'
+    )
     window.profile_editor.close()
