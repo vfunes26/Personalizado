@@ -25,3 +25,5 @@ Ronda 2 2026-11-18: reparacion sintaxis PowerShell real; ajuste 3 integridad SHA
 Ronda 2 revalidacion final 2026-11-18: proxy en WinVault, restauracion portable entre equipos con reautorizacion segura, SHA-256 antes de omitir compilacion y parser PowerShell.
 
 Ronda 2 cierre de regresiones 2026-11-18: pruebas Qt/Camoufox usan vault nativo simulado en Linux sin permitir almacenamiento de contrasenas en archivo.
+
+Ronda 3 2026-11-18: ajuste 5 Telegram stop/join antes de restaurar y reinicio condicionado, con abort si hilo activo; ajuste 6 vista previa de limpieza, allowlist del ZIP, ruta aprobada LIMPIAR y datos protegidos.
