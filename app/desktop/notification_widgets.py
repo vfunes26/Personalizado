@@ -314,9 +314,11 @@ class NotificationPanel(QWidget):
         except NotificationError as exc:
             self.telegram_status.show();self.telegram_status.setText(str(exc));return
         def done(value):
-            if self.token.text().strip()==token:self.bot_status.setText('@'+value['username'])
-            if self.token.text().strip()==token:self.telegram_status.hide()
-            return '' if self.token.text().strip()==token else 'Проверить токен бота'
+            try: same = self.active_bot_token() == token
+            except NotificationError: same = False
+            if same:self.bot_status.setText('@'+value['username'])
+            if same:self.telegram_status.hide()
+            return '' if same else 'Comprobar el bot otra vez'
         self.run('telegram',lambda:Telegram(token).check(),done,self.check_bot)
 
     def hook_config(self):return dict(self.webhook,url=self.url.text().strip(),method=self.method.currentText())
@@ -359,7 +361,7 @@ class NotificationPanel(QWidget):
                         and not replacement):
                     raise NotificationError(self.load_errors[channel])
             if self.telegram_toggle.isChecked():
-                Telegram(token or global_token)
+                Telegram(global_token or token)
                 if not self.recipients and not global_token:
                     raise NotificationError('Добавить получателя кнопкой «+».')
             if self.webhook_toggle.isChecked():validate_webhook(hook)

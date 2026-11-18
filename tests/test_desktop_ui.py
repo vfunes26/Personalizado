@@ -1560,3 +1560,28 @@ def test_settings_expose_manual_release_check(window,monkeypatch):
     window.preferences['automatic_updates']=False
     button.click()
     assert events==['manual']
+
+
+def test_global_bot_can_configure_profile_notifications_without_separate_token(window, monkeypatch):
+    from app.desktop.telegram_global import TelegramGlobalStore
+    from app.notifications import EVENTS
+
+    monkeypatch.setattr(TelegramGlobalStore, 'credentials', lambda self: {
+        'enabled': True, 'token': '123456:ABCDEF',
+        'owner_chat_id': '111', 'authorized_chat_ids': [],
+        'secret_ref': 'native-reference',
+    })
+    window.create_profile()
+    window.profile_tabs.setCurrentIndex(2)
+    panel = window.notifications_panel
+    panel.telegram_toggle.setChecked(True)
+    panel.token.clear()
+    panel.recipients = [{'id': '222', 'label': 'Prueba', 'type': 'private'}]
+    panel.render_recipients()
+    config, created, old = panel.prepare()
+    assert config['telegram']['enabled']
+    assert config['telegram']['events'] == list(EVENTS)
+    assert config['telegram']['recipients'][0]['id'] == '222'
+    assert config['telegram']['secret_ref'] == ''
+    assert not created
+    window.profile_editor.close()
