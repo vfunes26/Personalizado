@@ -85,24 +85,25 @@ class GmailSettings:
         if not ref:
             raise GmailError('Introduce la contraseña de aplicación para configurar Gmail.')
         data = {'sender': sender, 'recipients': addresses, 'secret_ref': ref}
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        if self.path.is_symlink() or any(p.is_symlink() for p in self.path.parents):
-            if created:
-                self.vault.delete(created)
-            raise GmailError('La ruta de configuración no está permitida.')
-        fd, temp = tempfile.mkstemp(prefix='.gmail-settings-', dir=self.path.parent)
+        temp = None
         try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            if self.path.is_symlink() or any(p.is_symlink() for p in self.path.parents):
+                raise GmailError('La ruta de configuración no está permitida.')
+            fd, temp = tempfile.mkstemp(prefix='.gmail-settings-', dir=self.path.parent)
             with os.fdopen(fd, 'w', encoding='utf-8') as stream:
                 json.dump(data, stream, ensure_ascii=False, indent=2)
                 stream.flush()
                 os.fsync(stream.fileno())
             os.replace(temp, self.path)
-        except OSError:
+        except (OSError, GmailError) as exc:
             if created:
                 self.vault.delete(created)
+            if isinstance(exc, GmailError):
+                raise
             raise GmailError('No se pudo guardar la configuración de Gmail.') from None
         finally:
-            if os.path.exists(temp):
+            if temp and os.path.exists(temp):
                 os.unlink(temp)
         if created and old['secret_ref'] and old['secret_ref'] != created:
             self.vault.delete(old['secret_ref'])
