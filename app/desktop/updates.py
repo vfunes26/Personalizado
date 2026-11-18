@@ -14,10 +14,10 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from PySide6.QtCore import QObject,QThread,Signal
-from ..attestations import verify_attestation, MAX_BUNDLE, AttestationError
+from ..attestations import verify_attestation, MAX_BUNDLE, AttestationError, REPOSITORY
 
-REPOSITORY='https://github.com/itwormz/extranjeria-cita-helper'
-API='https://api.github.com/repos/itwormz/extranjeria-cita-helper/releases/latest'
+API_ROOT='https://api.github.com/repos/'+REPOSITORY.removeprefix('https://github.com/')
+API=API_ROOT+'/releases/latest'
 MAX_PACKAGE=2*1024**3
 
 
@@ -105,7 +105,7 @@ def checksum_for(data,name):
 
 
 def release_commit(version, fetch):
-    url=f'https://api.github.com/repos/itwormz/extranjeria-cita-helper/git/ref/tags/v{version}'
+    url=f'{API_ROOT}/git/ref/tags/v{version}'
     for _ in range(4):
         with fetch(url) as response:raw=response.read(16385)
         if len(raw)>16384:raise ValueError('Release tag response too large')
@@ -113,7 +113,7 @@ def release_commit(version, fetch):
         if not re.fullmatch(r'[a-f0-9]{40}',sha):raise ValueError('Invalid release commit')
         if obj['type']=='commit':return sha
         if obj['type']!='tag':raise ValueError('Invalid release tag object')
-        url=f'https://api.github.com/repos/itwormz/extranjeria-cita-helper/git/tags/{sha}'
+        url=f'{API_ROOT}/git/tags/{sha}'
     raise ValueError('Too many nested release tags')
 
 
