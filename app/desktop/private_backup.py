@@ -4,6 +4,7 @@ No browser profiles, page diagnostics, tokens from the OS credential vault, or
 plaintext customer archives are included. No network requests are made.
 """
 import base64
+from contextlib import closing
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -70,8 +71,8 @@ def _snapshot_database(path):
     fd, tmp = tempfile.mkstemp(prefix='.ceh-db-', suffix='.sqlite3')
     os.close(fd)
     try:
-        with sqlite3.connect(f'file:{path.as_posix()}?mode=ro', uri=True, timeout=5) as source:
-            with sqlite3.connect(tmp) as destination:
+        with closing(sqlite3.connect(f'file:{path.as_posix()}?mode=ro', uri=True, timeout=5)) as source:
+            with closing(sqlite3.connect(tmp)) as destination:
                 source.backup(destination)
         return Path(tmp).read_bytes()
     finally:
