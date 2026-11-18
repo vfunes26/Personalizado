@@ -34,6 +34,72 @@ function EliminarSeguro([string]$ruta, [string]$root) {
     Avisar ('Eliminado: ' + $real)
 }
 
+
+# Se puede retirar un respaldo solo cuando no contiene datos exclusivos.
+function RespaldoDuplicado([string]$anterior, [string]$actual) {
+    if ((Get-Item -LiteralPath $anterior -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { return $false }
+    $esperados = @('Cita Extranjeria Helper.exe','LICENSE.txt','portable.flag',
+                   'codigo-commit.txt','codigo-fuente-local.sha256','_internal','data')
+    if (@(Get-ChildItem -LiteralPath $anterior -Force |
+          Where-Object { $_.Name -notin $esperados }).Count -gt 0) { return $false }
+    if (@(Get-ChildItem -LiteralPath $anterior -Recurse -Force |
+          Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }).Count -gt 0) { return $false }
+    $oldData = Join-Path $anterior 'data'
+    $newData = Join-Path $actual 'data'
+    if (-not (Test-Path -LiteralPath $oldData)) { return $true }
+    if (-not (Test-Path -LiteralPath $oldData -PathType Container) -or
+        -not (Test-Path -LiteralPath $newData -PathType Container)) { return $false }
+    if ((Get-Item -LiteralPath $newData -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { return $false }
+    foreach ($archivo in @(Get-ChildItem -LiteralPath $oldData -File -Recurse -Force)) {
+        $copia = Join-Path $newData $archivo.FullName.Substring($oldData.Length + 1)
+        if (-not (Test-Path -LiteralPath $copia -PathType Leaf)) { return $false }
+        if ((Get-Item -LiteralPath $copia -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { return $false }
+        if ((Get-FileHash -LiteralPath $archivo.FullName -Algorithm SHA256).Hash -cne
+            (Get-FileHash -LiteralPath $copia -Algorithm SHA256).Hash) { return $false }
+    }
+    return $true
+}
+
+# Borrar solo el contenido de Personalizado-final; mantener la carpeta.
+function VaciarFuenteManual([string]$root) {
+    $proyecto = Join-Path $root 'Proyecto'
+    if (-not (Test-Path -LiteralPath $proyecto -PathType Container)) {
+        throw 'No existe Proyecto. No se puede preparar Personalizado-final.'
+    }
+    $folder = Join-Path $proyecto 'Personalizado-final'
+    if (-not (Test-Path -LiteralPath $folder)) {
+        New-Item -ItemType Directory -Path $folder -ErrorAction Stop | Out-Null
+        Avisar ('Carpeta vacia preparada: ' + $folder)
+        return
+    }
+    if (-not (Test-Path -LiteralPath $folder -PathType Container) -or
+        ((Get-Item -LiteralPath $folder -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+        throw 'Personalizado-final no es una carpeta normal.'
+    }
+    foreach ($nombre in @('.venv','tasks.yml','data','.git','.env')) {
+        if (Test-Path -LiteralPath (Join-Path $folder $nombre)) {
+            Avisar ('PROTEGIDO Personalizado-final: contiene ' + $nombre)
+            return
+        }
+    }
+    $contenido = @(Get-ChildItem -LiteralPath $folder -Force)
+    if ($contenido.Count -eq 0) {
+        Avisar ('Personalizado-final ya esta vacia: ' + $folder)
+        return
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $folder 'scripts\build_desktop_app.py') -PathType Leaf) -or
+        -not (Test-Path -LiteralPath (Join-Path $folder 'uv.lock') -PathType Leaf)) {
+        Avisar 'PROTEGIDO Personalizado-final: no se reconoce como ZIP de codigo.'
+        return
+    }
+    if (@(Get-ChildItem -LiteralPath $folder -Recurse -Force |
+          Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }).Count -gt 0) {
+        throw 'Personalizado-final contiene enlaces o junctions; no se borra.'
+    }
+    foreach ($item in $contenido) { EliminarSeguro $item.FullName $root }
+    Avisar ('Personalizado-final VACIA y conservada: ' + $folder)
+}
+
 try {
     if (-not $env:SystemDrive) { throw 'No se puede localizar el disco del sistema.' }
     $root = Join-Path $env:SystemDrive 'CitaHelper'
@@ -50,8 +116,8 @@ try {
     }
     Write-Host ''
     Avisar 'Esta limpieza SOLO es adecuada despues de probar que la nueva app abre bien.'
-    Avisar 'Conserva: portable, datos privados, .venv, caches UV/Camoufox/FPGen y respaldos.'
-    Avisar 'Elimina: ZIP duplicados, temporales y fuentes manuales SIN dependencias.'
+    Avisar 'Conserva: portable actual, datos privados, .venv y caches UV/Camoufox/FPGen.'
+    Avisar 'Elimina: temporales, fuentes descargadas y respaldos con datos duplicados.'
     $answer = Read-Host 'Escribe LIMPIAR para ejecutar (otra respuesta cancela)'
     if ($answer -cne 'LIMPIAR') {
         Avisar 'Cancelado: nada eliminado.'
@@ -97,7 +163,7 @@ try {
     $proyecto = Join-Path $root 'Proyecto'
     if (Test-Path -LiteralPath $proyecto -PathType Container) {
         foreach ($folder in @(Get-ChildItem -LiteralPath $proyecto -Directory)) {
-            if ($folder.Name -notlike 'Personalizado-*') { continue }
+            if ($folder.Name -notlike 'Personalizado-*' -or $folder.Name -eq 'Personalizado-final') { continue }
             $venv = Test-Path -LiteralPath (Join-Path $folder.FullName '.venv')
             $private = Test-Path -LiteralPath (Join-Path $folder.FullName 'tasks.yml')
             $data = Test-Path -LiteralPath (Join-Path $folder.FullName 'data')
@@ -110,9 +176,35 @@ try {
             }
         }
     }
+    VaciarFuenteManual $root
+
+    $respaldos = Join-Path $compilaciones 'Respaldos'
+    if (Test-Path -LiteralPath $respaldos -PathType Container) {
+        foreach ($anterior in @(Get-ChildItem -LiteralPath $respaldos -Directory -Force |
+                                Where-Object { $_.Name -match '^Personalizado-[0-9]{8}-[0-9]{6}-[a-f0-9]{8}
+    exit 0
+} catch {
+    Write-Host ('[CitaHelper] Limpieza detenida: ' + $_.Exception.Message) -ForegroundColor Red
+    exit 1
+}
+ })) {
+            $duplicado = $false
+            try { $duplicado = RespaldoDuplicado $anterior.FullName $portable }
+            catch { Avisar ('Respaldo sin verificar: ' + $anterior.Name + ': ' + $_.Exception.Message) }
+            if ($duplicado) {
+                EliminarSeguro $anterior.FullName $root
+            } else {
+                Avisar ('Respaldo PROTEGIDO por datos no verificados: ' + $anterior.Name)
+            }
+        }
+        if (@(Get-ChildItem -LiteralPath $respaldos -Force).Count -eq 0) {
+            EliminarSeguro $respaldos $root
+        }
+    }
     Avisar 'Limpieza de duplicados terminada.'
-    Avisar ('Para respaldar SOLO el portable, copia: ' + $portable)
-    Avisar 'No se elimino .venv, los caches, RespaldosPrivados ni el portable original.'
+    Avisar ('Portable actual: ' + $portable)
+    Avisar 'Personalizado-final se conserva vacia cuando solo tenia fuentes reconocidas.'
+    Avisar 'No se elimino .venv, caches, RespaldosPrivados ni el portable original.'
     exit 0
 } catch {
     Write-Host ('[CitaHelper] Limpieza detenida: ' + $_.Exception.Message) -ForegroundColor Red
