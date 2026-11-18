@@ -21,6 +21,10 @@ if exist "%~dp0scripts\limpiar_portable.ps1" (
   )
   copy /Y "%~f0" "%RAIZ%\LimpiarPortable.bat" >nul
   if errorlevel 1 goto :error
+  rem Cerrar este BAT de la carpeta fuente antes de eliminarla.
+  rem El limpiador instalado continua en otra consola y pide confirmacion.
+  start "" "%RAIZ%\CompilarPortable.bat" /limpiar
+  exit /b 0
 )
 if not exist "%RAIZ%\CompilarPortable.bat" goto :error
 if not exist "%RAIZ%\limpiar_portable.ps1" goto :error
