@@ -4,61 +4,85 @@ Este documento separa la **validación automática de GitHub Actions** de las
 **pruebas reales del ejecutable Windows**. Estas últimas necesitan el ordenador
 del usuario; no se simulan como si ya hubieran pasado.
 
-## Condiciones previas
+## Condiciones previas para la compilación manual sin GitHub
 
-- La compilación se realiza únicamente cuando se terminan los 16 ajustes y
-  la persona decide ejecutarla.
-- No hace falta abrir Visual Studio. Sus componentes instalados pueden ser
-  utilizados por PyInstaller sin iniciar la interfaz de Visual Studio.
-- Debe existir `C:\CitaHelper\Proyecto\Personalizado-main\.venv` con
-  Python 3.13, PySide6, Playwright, Camoufox, FPGen y PyInstaller.
-- Camoufox debe estar instalado en
-  `%LOCALAPPDATA%\camoufox\camoufox\Cache` y FPGen debe conservar el
-  marcador y los hashes válidos. El BAT **no descarga esos archivos**.
-- Solo necesita internet para consultar GitHub y descargar el ZIP del código
-  fuente del commit más reciente. El resto de la compilación utiliza recursos
-  locales. La compilación no debe iniciarse mientras esté en funcionamiento
-  otra compilación en `C:\CitaHelper\Compilaciones`.
+- El código fuente actualizado se descarga manualmente del ZIP
+  `https://github.com/vfunes26/Personalizado/archive/refs/heads/main.zip`.
+  El BAT **no consulta GitHub**. Se necesita internet solamente para descargar
+  tú mismo el ZIP si no lo tienes.
+- Descomprime el nuevo código en
+  `C:\\CitaHelper\\Proyecto\\Personalizado-nuevo` (o un nombre distinto
+  dentro de `Proyecto`). **No sobrescribas**
+  `C:\\CitaHelper\\Proyecto\\Personalizado-main` porque contiene
+  `.venv` con las dependencias instaladas.
+- Conserva Python 3.13.18 x64, PyInstaller 6.22.3, hooks 2026.8,
+  PySide6, Playwright, Camoufox y FPGen del entorno probado.
+- Camoufox: `%LOCALAPPDATA%\\camoufox\\camoufox\\Cache`.
+  FPGen: `.venv\\Lib\\site-packages\\fpgen\\data` con los modelos y
+  el marcador `.pinned-model`; cada SHA-256 debe coincidir.
+- No es necesario abrir Visual Studio.
 
-## Primera obtención de los scripts
+## Instalar los archivos ligeros del BAT
 
-La primera vez, descargar el ZIP fuente de
-`https://github.com/vfunes26/Personalizado/archive/refs/heads/main.zip`
-y extraerlo en una carpeta dentro de `C:\CitaHelper\Proyecto`, por ejemplo
-`Personalizado-final`. **No borrar la carpeta `Personalizado-main`** que
-contiene `.venv` ni alterar el portable original.
+Del ZIP nuevo, guardar en la raíz de `C:\\CitaHelper`:
 
-`CompilarPortable.bat` funciona desde cualquier ubicación siempre que esté
-junto a su carpeta `scripts` o exista una copia de
-`scripts\compilar_portable.ps1` en alguna carpeta del proyecto bajo
-`C:\CitaHelper\Proyecto`. El BAT busca allí el controlador; no necesita
-copiar el navegador ni las librerías Python.
+- `CompilarPortable.bat` y `LimpiarPortable.bat`.
+- `scripts\\compilar_portable.ps1` renombrado en destino solo como
+  `C:\\CitaHelper\\compilar_portable.ps1`.
+- `scripts\\limpiar_portable.ps1` renombrado en destino solo como
+  `C:\\CitaHelper\\limpiar_portable.ps1`.
 
-## Generación y comprobación del resultado
+Los BAT pueden moverse al Escritorio: siempre buscan el controlador bajo
+`C:\\CitaHelper`. Cuando un BAT se ejecuta directamente desde el árbol fuente
+donde está su carpeta `scripts`, copia automáticamente ambos controladores
+a `C:\\CitaHelper`.
 
-1. Ejecutar `CompilarPortable.bat` con la aplicación antigua cerrada.
-2. El controlador consulta el commit más reciente de
-   `vfunes26/Personalizado` y descarga solo su código fuente, con reutilización
-   del ZIP si ese commit ya está en caché.
-3. Valida el modelo FPGen y Camoufox, comprueba la versión del repositorio y
-   realiza una compilación **nativa Windows**, sin construir en GitHub Actions.
-4. Ejecuta `scripts/verify_bundle.py` con un directorio temporal de datos
-   y sin necesitar conexión al portal de Extranjería. Comprueba navegador
-   empaquetado, GUI, origen criptográfico de firma y comunicación del trabajador.
-5. Genera ZIP portable, verifica SHA-256, extrae a una carpeta temporal y
-   comprueba `portable.flag`, ejecutable, navegador y FPGen.
-6. Si existe una compilación propia anterior, el BAT exige que esté cerrada;
-   valida los datos y los copia, verificando después todos los bytes con SHA-256.
-   Rechaza enlaces o SQLite con archivos `-wal`/`-shm` pendientes.
-7. Hace el intercambio únicamente al finalizar las verificaciones. La anterior
-   se conserva en `C:\CitaHelper\Compilaciones\Respaldos`. Ante un error, no
-   sustituye una compilación funcional y procura restaurarla.
+## Compilación y verificación
 
-Salida principal:
-`C:\CitaHelper\Compilaciones\Cita Extranjeria Helper - Personalizado`
+1. Ejecutar `CompilarPortable.bat`. El controlador elige una carpeta
+   descomprimida que contenga fuentes pero **no `.venv`** (para evitar
+   compilar por accidente el código viejo de la carpeta de dependencias).
+2. Comprueba Python y todos los modelos FPGen. No utiliza el descargador del
+   navegador ni consulta GitHub.
+3. Copia únicamente los directorios públicos de fuentes `app`, `scripts`,
+   `catalogs`, `tests` y `.github`, más la documentación y metadatos
+   requeridos, a una ruta temporal corta `C:\\CitaHelper\\s\\bXXXXXXXX\\src`.
+   No copia `tasks.yml`, `data` ni `.venv`.
+4. Compila con PyInstaller, ejecuta `scripts/verify_bundle.py`
+   (GUI, Camoufox, Sigstore y trabajador IPC), genera ZIP local con su
+   archivo SHA-256 y lo verifica antes de extraerlo.
+5. Conserva íntegra una compilación anterior hasta que la nueva está preparada.
+   Si hay datos privados de una compilación anterior, verifica que no haya
+   SQLite WAL/SHM activo, los copia y compara SHA-256 archivo por archivo.
+6. Tras instalar correctamente la nueva carpeta
+   `C:\\CitaHelper\\Compilaciones\\Cita Extranjeria Helper - Personalizado`,
+   elimina el ZIP, el `data/dist` y los temporales **del intento actual**.
+   No conserva copia ZIP de la misma compilación.
+7. Abre manualmente el ejecutable nuevo y termina las pruebas funcionales.
 
-ZIP y checksum:
-`C:\CitaHelper\Compilaciones\Paquetes`
+## Limpieza final después de probar
+
+Solo después de comprobar que el nuevo ejecutable abre y funciona:
+
+- Haz doble clic en `LimpiarPortable.bat`, o ejecuta
+  `CompilarPortable.bat /limpiar`.
+- El controlador comprobará el portable y pedirá escribir `LIMPIAR`.
+- Elimina `Compilaciones\\Paquetes`, `Compilaciones\\.preparando-*`,
+  temporales conocidos `s`, la caché antigua de fuente
+  `CacheCompilacion\\FuentesGitHub`, el ZIP antiguo
+  `CacheCompilacion\\Personalizado-final16.zip`, la extracción temporal
+  `ExtraerFinal16` y fuentes manuales `Proyecto\\Personalizado-*`
+  siempre que **no** contengan `.venv`, `tasks.yml`, `data` ni `.git`.
+- **Nunca elimina** `Proyecto\\Personalizado-main` mientras tenga `.venv`,
+  ni `CacheCompilacion\\Camoufox`, `CacheCompilacion\\Fpgen`,
+  `CacheCompilacion\\CacheUV`, `RespaldosPrivados`,
+  `Compilaciones\\Respaldos`, el portable final o el portable original
+  del Escritorio.
+
+**Por qué queda `.venv`:** contiene dependencias instaladas con rutas Windows.
+Borrarlo haría imposible volver a compilar sin reinstalar esos paquetes.
+El objetivo de conservar solamente el portable se cumple haciendo una copia
+de seguridad **solo de su carpeta descomprimida**.
 
 ## Pruebas manuales después de compilar
 
@@ -99,26 +123,13 @@ datos del portable del Escritorio.
 - Portable anterior conservado hasta que se compruebe la nueva versión.
 
 
-## Corrección aplicada tras primera compilación en Windows
+## Histórico de la corrección de ruta larga
 
-El primer intento de compilación de la versión `0.3.5` produjo un error
-`FileNotFoundError` durante `PyInstaller COLLECT` al escribir
-`_internal/cryptography-50.0.2.dist-info/sboms/cryptography-rust.cyclonedx.json`.
-El ejecutable ya se había construido, pero **el portable no estaba completo**.
+El primer intento de la versión 0.3.5 falló en la fase de PyInstaller
+`COLLECT` por rutas excesivamente largas de `cryptography`.
+Un intento posterior usando una ruta corta completó `COLLECT`,
+`verify_bundle.py` y el ZIP portable de Windows correctamente.
 
-La causa era una ruta física excesivamente larga bajo
-`C:\\CitaHelper\\CacheCompilacion\\FuentesGitHub\\Personalizado-<SHA>\\Personalizado-<SHA>`.
-El controlador actualizado conserva el ZIP del código fuente en la caché,
-pero extrae y compila desde `C:\\CitaHelper\\s\\<12 caracteres del SHA>\\Personalizado-<SHA>`,
-comprobando que la ruta del proyecto sea de como máximo 120 caracteres.
-
-No hay que reinstalar dependencias ni descargar Camoufox o FPGen.
-Solo hay que actualizar el pequeño archivo
-`C:\\CitaHelper\\Proyecto\\Personalizado-final\\scripts\\compilar_portable.ps1`
-y ejecutar de nuevo `C:\\CitaHelper\\CompilarPortable.bat`. El controlador
-consulta la versión actual de GitHub y almacena en caché el nuevo ZIP
-**del código**, no el navegador. Se conserva el intento fallido para
-diagnóstico hasta finalizar la prueba en Windows.
-
-La versión de PyInstaller observada en ese intento fue `6.22.3`, Python
-`3.13.18`, hooks `2026.8` y Windows `10.0.19045`.
+La modalidad manual mantiene la solución usando una raíz temporal corta
+`C:\\CitaHelper\\s\\bXXXXXXXX\\src`. No es necesario reinstalar Camoufox
+ni FPGen por este problema.
