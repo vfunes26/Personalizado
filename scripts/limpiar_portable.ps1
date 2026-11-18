@@ -181,13 +181,7 @@ try {
     $respaldos = Join-Path $compilaciones 'Respaldos'
     if (Test-Path -LiteralPath $respaldos -PathType Container) {
         foreach ($anterior in @(Get-ChildItem -LiteralPath $respaldos -Directory -Force |
-                                Where-Object { $_.Name -match '^Personalizado-[0-9]{8}-[0-9]{6}-[a-f0-9]{8}
-    exit 0
-} catch {
-    Write-Host ('[CitaHelper] Limpieza detenida: ' + $_.Exception.Message) -ForegroundColor Red
-    exit 1
-}
- })) {
+                                Where-Object { $_.Name -match '^Personalizado-[0-9]{8}-[0-9]{6}-[a-f0-9]{8}$' })) {
             $duplicado = $false
             try { $duplicado = RespaldoDuplicado $anterior.FullName $portable }
             catch { Avisar ('Respaldo sin verificar: ' + $anterior.Name + ': ' + $_.Exception.Message) }
