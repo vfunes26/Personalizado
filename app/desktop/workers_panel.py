@@ -368,7 +368,9 @@ class WorkersPanel(QWidget):
         self.save_config()
         controller = self.main_window.controller
         busy = getattr(controller, 'profile_id', None) if getattr(controller, 'active', False) else None
+        self.append_log(None, f'Se solicitó iniciar {len(rows)} trabajador(es) activo(s).')
         self.pool.start(rows, busy)
+        self.worker_note.setText(f'Inicio solicitado para {len(rows)} trabajador(es). Consulta Estado o el registro si alguno no arranca.')
 
     def append_log(self, index, text):
         prefix = 'GENERAL' if index is None else f'T{index + 1}'
