@@ -1,5 +1,6 @@
 """Normalizacion y comprobacion de proxies (sin Qt, solo sockets locales)."""
 import socket
+import ssl
 import threading
 import time
 
@@ -32,7 +33,15 @@ def test_server_without_scheme_gets_http_and_pasted_credentials_are_split():
     assert normalize_proxy('  ') == ('', '', '')
 
 
-def test_http_proxy_results_are_reported_with_a_reason():
+def test_http_proxy_results_are_reported_with_a_reason(monkeypatch):
+    seen_hosts = []
+
+    class MockContext:
+        def wrap_socket(self, sock, *, server_hostname):
+            seen_hosts.append(server_hostname)
+            return sock  # Local proxy fixture only; real code must verify TLS.
+
+    monkeypatch.setattr(ssl, 'create_default_context', MockContext)
     def ok(conn):
         conn.recv(4096)
         conn.sendall(b'HTTP/1.1 200 Connection established\r\n\r\n')
@@ -47,7 +56,9 @@ def test_http_proxy_results_are_reported_with_a_reason():
     good, good_port = serve(ok)
     bad, bad_port = serve(denied)
     try:
-        assert check_proxy(f'http://127.0.0.1:{good_port}', 'u', 'p')[0] is True
+        accepted, reason = check_proxy(f'http://127.0.0.1:{good_port}', 'u', 'p')
+        assert accepted and 'HTTPS' in reason
+        assert seen_hosts == ['icp.administracionelectronica.gob.es']
         accepted, reason = check_proxy(f'http://127.0.0.1:{bad_port}', 'u', 'p')
         assert accepted is False and '407' in reason
     finally:
@@ -62,3 +73,26 @@ def test_closed_port_and_missing_port_fail_without_raising():
     closed.close()
     assert check_proxy(f'http://127.0.0.1:{port}', timeout=2)[0] is False
     assert check_proxy('http://127.0.0.1')[0] is False
+def test_http_proxy_rejects_invalid_portal_certificate(monkeypatch):
+    class InvalidCertificateContext:
+        def wrap_socket(self, sock, *, server_hostname):
+            raise ssl.SSLCertVerificationError('synthetic untrusted certificate')
+
+    monkeypatch.setattr(ssl, 'create_default_context', InvalidCertificateContext)
+
+    def tunnel(conn):
+        try:
+            conn.recv(4096)
+            conn.sendall(b'HTTP/1.1 200 Connection established\\r\\n\\r\\n')
+            time.sleep(0.2)
+        finally:
+            conn.close()
+
+    server, port = serve(tunnel)
+    try:
+        ok, detail = check_proxy(f'http://127.0.0.1:{port}')
+        assert not ok
+        assert 'Certificado HTTPS' in detail
+        assert 'synthetic' not in detail
+    finally:
+        server.close()
