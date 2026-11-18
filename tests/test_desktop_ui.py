@@ -1153,7 +1153,7 @@ def test_profile_tab_visits_inputs_in_visual_order_after_relayout(window,all_tab
         if procedure=='regreso':order.append(f['document_type'])
         order.extend([f['document_number'],f['full_name']])
     if procedure=='huellas':order.append(f['nationality'])
-    order.extend([f['phone'],f['email']])
+    order.extend([f['phone'],f['email'],f['office']])
     order[0].setFocus();QApplication.processEvents()
     for expected in order:
         current=QApplication.focusWidget()

@@ -492,7 +492,7 @@ class DesktopWindow(QMainWindow):
         self.document_fields_row=QWidget();self.document_fields_layout=QHBoxLayout(self.document_fields_row)
         self.document_fields_layout.setContentsMargins(0,0,0,0);self.document_fields_layout.setSpacing(12)
         self.profile_field_boxes['document_type'].setFixedWidth(160)
-        self.profile_focus_fields=[self.fields[key] for key in ('label','province','procedure','access_mode')]+[self.identity_buttons['copy'],self.identity_buttons['manual']]+[self.fields[key] for key in ('document_type','document_number','full_name','nationality','phone','email')]
+        self.profile_focus_fields=[self.fields[key] for key in ('label','province','procedure','access_mode')]+[self.identity_buttons['copy'],self.identity_buttons['manual']]+[self.fields[key] for key in ('document_type','document_number','full_name','nationality','phone','email','office')]
         self.fields['province'].currentIndexChanged.connect(self.refresh_office_choices)
         self.fields['procedure'].currentIndexChanged.connect(self.update_profile_document)
         self.fields['document_type'].currentIndexChanged.connect(self.update_profile_document)
