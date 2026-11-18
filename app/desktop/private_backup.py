@@ -79,6 +79,20 @@ def _snapshot_database(path):
         Path(tmp).unlink(missing_ok=True)
 
 
+def _validate_database(data):
+    fd, temporary = tempfile.mkstemp(prefix='.ceh-verify-', suffix='.sqlite3')
+    try:
+        with os.fdopen(fd, 'wb') as stream:
+            stream.write(data)
+        with closing(sqlite3.connect(temporary)) as conn:
+            if conn.execute('PRAGMA quick_check').fetchone() != ('ok',):
+                raise BackupError('La base de datos del respaldo no pasa la comprobación de integridad.')
+    except sqlite3.Error:
+        raise BackupError('La base de datos del respaldo está dañada.') from None
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+
+
 def _files(root):
     names = set(FILES)
     budget = root / 'data' / 'appointment-budget'
@@ -178,9 +192,12 @@ def _decode(source, password):
         if name in DATABASES:
             if not data.startswith(b'SQLite format 3\x00'):
                 raise BackupError('Base de datos del respaldo inválida.')
+            _validate_database(data)
         elif name.endswith('.json'):
             try:
-                json.loads(data)
+                parsed = json.loads(data)
+                if not isinstance(parsed, dict):
+                    raise ValueError()
             except (ValueError, UnicodeDecodeError):
                 raise BackupError('Configuración JSON del respaldo inválida.') from None
         records[name] = data
