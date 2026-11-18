@@ -12,7 +12,10 @@ def test_launcher_can_run_from_any_directory_and_finds_citahelper_root():
     launcher = (ROOT / 'CompilarPortable.bat').read_text(encoding='utf-8')
     assert '%SystemDrive%\\CitaHelper' in launcher
     assert '%~dp0scripts\\compilar_portable.ps1' in launcher
-    assert 'Proyecto\\Personalizado-main\\scripts\\compilar_portable.ps1' in launcher
+    assert '%RAIZ%\\compilar_portable.ps1' in launcher
+    assert 'limpiar_portable.ps1' in launcher
+    assert '"/limpiar"' in launcher
+    assert 'Compilando codigo descomprimido manualmente' in launcher
     assert 'powershell.exe -NoLogo -NoProfile' in launcher
     assert 'if not defined CONTROL' in launcher
     assert 'rmdir /s' not in launcher.lower()
@@ -30,21 +33,25 @@ def test_native_windows_compiler_refuses_browser_and_model_downloads():
 
 def test_compilation_helper_checks_actual_pinned_source_and_dependencies():
     control = (ROOT / 'scripts/compilar_portable.ps1').read_text(encoding='utf-8')
-    assert 'https://api.github.com/repos/vfunes26/Personalizado/commits/main' in control
-    assert "'/commits/main'" not in control
+    assert 'https://api.github.com/repos/vfunes26/Personalizado/commits/main' not in control
+    assert 'Invoke-WebRequest' not in control
+    assert 'Invoke-RestMethod' not in control
+    assert 'ElegirFuente $root $Proyecto' in control
+    assert 'CopiarFuentes $manualSource $source' in control
+    assert 'codigo-fuente-local.sha256' in control
     assert "camoufox_path(download_if_missing=False)" in control
     assert "PIN['file_sha256'].items()" in control
     assert "scripts/verify_bundle.py" in control
     assert "scripts/package_release.py" in control
     assert "Get-FileHash -Algorithm SHA256" in control
     assert "CodigoFuente" not in control  # No blindly trusted stale archive.
-    assert "ConfirmarZip $sourceZip" in control
-    # Windows PyInstaller COLLECT can hit MAX_PATH when the long SHA
-    # appears twice in a nested extraction directory.
+    # Avoid MAX_PATH: stage only public code under a short temporary directory.
     assert "$shortSourceRoot = Join-Path $root 's'" in control
-    assert '$expanded = Join-Path $shortSourceRoot $sha.Substring(0, 12)' in control
+    assert "('b' + [Guid]::NewGuid().ToString('N').Substring(0,8))" in control
     assert '$source.Length -gt 120' in control
-    assert "$expanded = Join-Path $sourceCache ('Personalizado-' + $sha)" not in control
+    assert "'tests','.github'" in control
+    assert "Remove-Item -LiteralPath $buildRoot -Recurse -Force" in control
+    assert "Copy-Item -LiteralPath $zip -Destination" not in control
 
 
 def test_helper_verifies_new_build_before_safely_replacing_old_one():
@@ -71,3 +78,35 @@ def test_no_automatic_windows_build_was_enabled():
         encoding='utf-8')
     assert 'workflow_dispatch:' in actions
     assert 'push:' not in actions
+
+
+def test_cleanup_runs_separately_after_manual_test_and_preserves_dependencies():
+    cleanup = (ROOT / 'scripts/limpiar_portable.ps1').read_text(encoding='utf-8')
+    launcher = (ROOT / 'CompilarPortable.bat').read_text(encoding='utf-8')
+    assert 'Read-Host' in cleanup
+    assert "-cne 'LIMPIAR'" in cleanup
+    assert 'Cita Extranjeria Helper.exe' in cleanup
+    assert 'portable.flag' in cleanup
+    assert 'compilar_portable.ps1' in launcher
+    assert 'limpiar_portable.ps1' in launcher
+    assert "Join-Path $compilaciones 'Paquetes'" in cleanup
+    assert "'FuentesGitHub','ExtraerFinal16'" in cleanup
+    assert "'.venv'" in cleanup
+    assert "'.git'" in cleanup
+    assert "'tasks.yml'" in cleanup
+    assert "'.preparando-*'" in cleanup
+    assert "Remove-Item -LiteralPath $real" in cleanup
+    assert "Remove-Item -LiteralPath $root" not in cleanup
+    assert "Remove-Item -LiteralPath $portable" not in cleanup
+    assert "RespaldoPrivados" not in cleanup or 'No se elimino .venv' in cleanup
+
+
+def test_compiler_from_manual_source_is_immune_to_unwanted_private_files():
+    control = (ROOT / 'scripts/compilar_portable.ps1').read_text(encoding='utf-8')
+    for part in ("'app','scripts','catalogs','tests','.github'",
+                 "'pyproject.toml','uv.lock','README.md'"):
+        assert part in control
+    assert 'CopiarFuentes' in control
+    assert "Join-Path $toRoot 'data'" in control
+    assert "Join-Path $toRoot 'tasks.yml'" in control
+    assert 'No se permite empaquetar perfiles o datos privados.' in control
