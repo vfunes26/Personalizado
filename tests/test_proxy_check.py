@@ -73,6 +73,8 @@ def test_closed_port_and_missing_port_fail_without_raising():
     closed.close()
     assert check_proxy(f'http://127.0.0.1:{port}', timeout=2)[0] is False
     assert check_proxy('http://127.0.0.1')[0] is False
+
+
 def test_http_proxy_rejects_invalid_portal_certificate(monkeypatch):
     class InvalidCertificateContext:
         def wrap_socket(self, sock, *, server_hostname):
@@ -83,7 +85,7 @@ def test_http_proxy_rejects_invalid_portal_certificate(monkeypatch):
     def tunnel(conn):
         try:
             conn.recv(4096)
-            conn.sendall(b'HTTP/1.1 200 Connection established\\r\\n\\r\\n')
+            conn.sendall(b'HTTP/1.1 200 Connection established\r\n\r\n')
             time.sleep(0.2)
         finally:
             conn.close()
