@@ -31,6 +31,9 @@ class FakeClient:
         if method == 'getUpdates':
             offset = (data or {}).get('offset')
             return [u for u in self.updates if offset is None or u['update_id'] >= offset]
+        if method == 'sendMessage':
+            self.sent.append((str(data['chat_id']), data['text']))
+            return {'message_id': 9000 + len(self.sent)}
         return True
     def send(self, chat_id, text, current=lambda: True): self.sent.append((str(chat_id), text))
 
@@ -137,3 +140,137 @@ def test_webhook_or_missing_recipient_disables_inbox():
         store = ProfileStore(Path(d) / 'profiles.yml', CATALOG)
         inbox = TelegramInbox(store, FakeVault(), client=FakeClient())
         assert not inbox.prepare() and 'destinatario' in inbox.disabled_reason
+
+class FakeMail:
+    def __init__(self):
+        self.sent = []
+        self.enabled = True
+
+    def read(self):
+        return {'secret_ref': 'fake-key' if self.enabled else '',
+                'recipients': ['authorized@example.com']}
+
+    def send(self, subject, body):
+        self.sent.append((subject, body))
+        return 1
+
+
+def callback(uid, action_data, *, chat=ALLOWED, author=None, message_id=None):
+    return {
+        'update_id': uid,
+        'callback_query': {
+            'id': 'answer-' + str(uid),
+            'from': {'id': chat if author is None else author},
+            'data': action_data,
+            'message': {
+                'message_id': message_id,
+                'chat': {'id': chat, 'type': 'private'},
+            },
+        },
+    }
+
+
+def _created_for_deletion(directory):
+    store, vault, client, inbox, clock = setup(directory)
+    mail = FakeMail()
+    inbox.deletion_service.mail = mail
+    client.updates = [message(1, '/perfil\n' + submission(PERFIL='A.B.'))]
+    inbox.poll_once()
+    assert [t.label for t in store.load()] == ['Base', 'A.B.']
+    client.updates = [message(2, '/perfiles')]
+    inbox.poll_once()
+    assert '1. Base' in client.sent[-1][1] and '2. A.B.' in client.sent[-1][1]
+    return store, client, inbox, mail, clock
+
+
+def test_delete_telegram_requires_confirmation_and_preserves_optional_name():
+    with tempfile.TemporaryDirectory() as directory:
+        store, client, inbox, mail, _ = _created_for_deletion(directory)
+        original = {t.label: t.id for t in store.load()}
+        client.updates = [message(3, '/borrar 2')]
+        inbox.poll_once()
+        assert len(store.load()) == 2
+        request = next(data for method, data in reversed(client.calls) if method == 'sendMessage')
+        assert '«A.B.»' in request['text']
+        assert request['reply_markup']['inline_keyboard'][0][0]['text'].startswith('✅ Confirmar')
+        token = request['reply_markup']['inline_keyboard'][0][0]['callback_data']
+        client.updates = [callback(4, token, message_id=9000 + len(client.sent))]
+        inbox.poll_once()
+        assert [t.label for t in store.load()] == ['Base']
+        assert store.load()[0].id == original['Base']
+        assert len(mail.sent) == 1
+        assert 'A.B.' in mail.sent[0][1] and 'documento' in mail.sent[0][1]
+        assert len(list((Path(directory)/'data').glob('profile-deletions.jsonl'))) == 1
+        audit = (Path(directory)/'data/profile-deletions.jsonl').read_text()
+        assert 'gmail_sent' in audit and 'BASE USER' not in audit
+
+
+def test_delete_telegram_cancel_keeps_every_profile():
+    with tempfile.TemporaryDirectory() as directory:
+        store, client, inbox, mail, _ = _created_for_deletion(directory)
+        client.updates = [message(3, '/borrar 2')]
+        inbox.poll_once()
+        request = next(data for method, data in reversed(client.calls) if method == 'sendMessage')
+        token = request['reply_markup']['inline_keyboard'][0][1]['callback_data']
+        client.updates = [callback(4, token, message_id=9000 + len(client.sent))]
+        inbox.poll_once()
+        assert len(store.load()) == 2
+        assert not mail.sent
+        assert 'cancelada' in client.sent[-1][1]
+
+
+def test_delete_telegram_different_chat_cannot_confirm():
+    with tempfile.TemporaryDirectory() as directory:
+        store, client, inbox, mail, _ = _created_for_deletion(directory)
+        client.updates = [message(3, '/borrar 2')]
+        inbox.poll_once()
+        request = next(data for method, data in reversed(client.calls) if method == 'sendMessage')
+        token = request['reply_markup']['inline_keyboard'][0][0]['callback_data']
+        client.updates = [callback(4, token, chat=STRANGER, message_id=9000 + len(client.sent))]
+        inbox.poll_once()
+        assert len(store.load()) == 2
+        assert not mail.sent
+
+
+def test_delete_telegram_refuses_stale_profile_list_and_source():
+    with tempfile.TemporaryDirectory() as directory:
+        store, client, inbox, mail, _ = _created_for_deletion(directory)
+        client.updates = [message(3, '/borrar 1')]
+        inbox.poll_once()
+        assert 'conectado' in client.sent[-1][1]
+        store.save_last_profile(store.load()[1].id)
+        client.updates = [message(4, '/borrar 2')]
+        inbox.poll_once()
+        assert 'lista cambió' in client.sent[-1][1]
+        assert len(store.load()) == 2
+        assert not mail.sent
+
+
+def test_delete_telegram_refuses_running_profile():
+    from app.state import StateStore
+    with tempfile.TemporaryDirectory() as directory:
+        store, client, inbox, mail, _ = _created_for_deletion(directory)
+        profile_id = store.load()[1].id
+        client.updates = [message(3, '/borrar 2')]
+        inbox.poll_once()
+        request = next(data for method, data in reversed(client.calls) if method == 'sendMessage')
+        token = request['reply_markup']['inline_keyboard'][0][0]['callback_data']
+        state = StateStore(Path(directory)/'data/state.db')
+        with state.task_lock(profile_id) as acquired:
+            assert acquired
+            client.updates = [callback(4, token, message_id=9000 + len(client.sent))]
+            inbox.poll_once()
+        assert len(store.load()) == 2
+        assert not mail.sent
+        assert 'ejecución' in client.sent[-1][1]
+
+
+def test_delete_telegram_needs_gmail_before_confirmation():
+    with tempfile.TemporaryDirectory() as directory:
+        store, client, inbox, mail, _ = _created_for_deletion(directory)
+        mail.enabled = False
+        client.updates = [message(3, '/borrar 2')]
+        inbox.poll_once()
+        assert 'Configura Gmail' in client.sent[-1][1]
+        assert len(store.load()) == 2
+        assert not any(method == 'sendMessage' for method, _ in client.calls)
