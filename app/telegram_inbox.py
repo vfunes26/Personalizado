@@ -33,6 +33,7 @@ MAX_CREATED_PER_HOUR = 10
 HELP_COMMANDS = {'/start', '/ayuda', '/help', '/plantilla', '/perfil'}
 HOLD_SECONDS = PAIRING_LIFETIME_SECONDS + 30
 DELETE_CONFIRM_SECONDS = 180
+PROFILE_LIST_SECONDS = 600
 
 
 class Source:
@@ -87,6 +88,7 @@ class TelegramInbox:
         # Keys are authorized private chat IDs; all values expire automatically.
         self.listings = {}
         self.pending_deletions = {}
+        self._source_identity = None
 
     # ------------------------------------------------------------------ setup
     def prepare(self):
@@ -97,6 +99,12 @@ class TelegramInbox:
             return False
         if not self._injected_client:
             self.client = Telegram(source.token)
+        identity = (source.profile_id, source.token, tuple(sorted(source.allowed_chats)))
+        if self._source_identity is not None and self._source_identity != identity:
+            # Pending approvals are never transferable to another bot/source.
+            self.listings.clear()
+            self.pending_deletions.clear()
+        self._source_identity = identity
         self.source = source
         try:
             if self.client.call('getWebhookInfo').get('url'):
@@ -179,7 +187,9 @@ class TelegramInbox:
         except ValueError:
             return 'No se pudo leer la lista de perfiles.'
         if chat_id is not None:
-            self.listings[str(chat_id)] = (revision, tuple(t.id for t in tasks))
+            # A new listing supersedes any previous pending deletion.
+            self.pending_deletions.pop(str(chat_id), None)
+            self.listings[str(chat_id)] = (revision, tuple(t.id for t in tasks), self.now())
         if not tasks:
             return 'No hay perfiles.'
         items = (f'{index}. {t.label} ({t.province})' +
@@ -194,14 +204,17 @@ class TelegramInbox:
         if len(parts) != 2 or re.fullmatch(r'[0-9]{1,3}', parts[1]) is None:
             return self._reply(chat_id, 'Uso: /perfiles y después /borrar 2.')
         index = int(parts[1])
+        listing = self.listings.get(chat_id)
+        if listing is None or self.now() - listing[2] > PROFILE_LIST_SECONDS:
+            self.listings.pop(chat_id, None)
+            return self._reply(chat_id, 'Primero envía /perfiles para obtener una lista actualizada.')
         try:
             tasks = self.store.load()
             revision = self.store.revision()
-            if chat_id in self.listings:
-                saved_rev, saved_ids = self.listings[chat_id]
-                if saved_rev != revision or saved_ids != tuple(t.id for t in tasks):
-                    self.listings.pop(chat_id, None)
-                    return self._reply(chat_id, 'La lista cambió. Envía /perfiles para ver la numeración actual.')
+            saved_rev, saved_ids, _shown_at = listing
+            if saved_rev != revision or saved_ids != tuple(t.id for t in tasks):
+                self.listings.pop(chat_id, None)
+                return self._reply(chat_id, 'La lista cambió. Envía /perfiles para ver la numeración actual.')
         except ValueError:
             return self._reply(chat_id, 'No se pudieron leer los perfiles.')
         if not 1 <= index <= len(tasks):
@@ -231,8 +244,10 @@ class TelegramInbox:
                     'Esta acción requiere confirmación y quedará registrada.'
                 ), 'reply_markup': buttons,
             })
-            self.pending_deletions[chat_id]['message_id'] = (
-                response.get('message_id') if isinstance(response, dict) else None)
+            response_id = response.get('message_id') if isinstance(response, dict) else None
+            if not isinstance(response_id, int) or response_id <= 0:
+                raise NotificationError('Telegram no confirmó la solicitud de eliminación.')
+            self.pending_deletions[chat_id]['message_id'] = response_id
         except NotificationError:
             self.pending_deletions.pop(chat_id, None)
             raise
@@ -259,8 +274,7 @@ class TelegramInbox:
         pending = self.pending_deletions.get(chat_id)
         if (len(parts) != 3 or parts[1] not in {'yes', 'no'} or
                 pending is None or pending['token'] != parts[2] or
-                (pending.get('message_id') is not None and
-                 pending['message_id'] != message.get('message_id'))):
+                pending['message_id'] != message.get('message_id')):
             return self._reply(chat_id, 'Confirmación inválida o caducada. Envía /perfiles y repite la solicitud.')
         self.pending_deletions.pop(chat_id, None)
         try:
