@@ -15,8 +15,20 @@ function EliminarSeguro([string]$ruta, [string]$root) {
     if (-not $real.StartsWith($base + '\\', [StringComparison]::OrdinalIgnoreCase)) {
         throw ('Fuera del directorio permitido: ' + $ruta)
     }
-    if ((Get-Item -LiteralPath $real -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) {
-        throw ('No se borran enlaces ni junctions: ' + $real)
+    $cursor = $real
+    while ($cursor.Length -ge $base.Length) {
+        if ((Get-Item -LiteralPath $cursor -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) {
+            throw ('No se borran enlaces ni junctions: ' + $cursor)
+        }
+        if ($cursor -eq $base) { break }
+        $cursor = [IO.Path]::GetDirectoryName($cursor)
+    }
+    if (Test-Path -LiteralPath $real -PathType Container) {
+        $links = @(Get-ChildItem -LiteralPath $real -Recurse -Force |
+            Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint })
+        if ($links.Count -gt 0) {
+            throw ('Hay enlaces en el interior. No se borra: ' + $real)
+        }
     }
     Remove-Item -LiteralPath $real -Recurse -Force -ErrorAction Stop
     Avisar ('Eliminado: ' + $real)
