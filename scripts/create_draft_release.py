@@ -27,7 +27,7 @@ def verified_assets(directory, version):
         deltas = sorted(directory.glob(portable[:-4] + '-from-*.delta.zip'))
         for delta in deltas:
             match = re.fullmatch(
-                re.escape(portable[:-4]) + r'-from-([0-9]+\\.[0-9]+\\.[0-9]+)\\.delta\\.zip',
+                re.escape(portable[:-4]) + r'-from-([0-9]+\.[0-9]+\.[0-9]+)\.delta\.zip',
                 delta.name)
             if (not match or
                     tuple(map(int,match.group(1).split('.'))) >=
