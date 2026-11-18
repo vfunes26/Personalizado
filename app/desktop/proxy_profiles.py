@@ -20,12 +20,15 @@ class ProxyCredentialVault(NotificationVault):
     SERVICE = "Cita Extranjeria Helper proxy credentials"
 
     def put(self, credentials):
+        reference = None
         try:
             reference = super().put(credentials)
             if self.get(reference) != credentials:
                 raise ProxyProfileError("No se verificaron las credenciales guardadas.")
             return reference
         except (NotificationError, ProxyProfileError):
+            if reference:
+                self.delete(reference)
             raise ProxyProfileError(
                 "No se pudo guardar el proxy en el gestor de credenciales del sistema."
             ) from None
@@ -142,8 +145,14 @@ class ProxyProfileStore:
         for item in hydrated["proxy_profiles"]:
             reference = item.get("secret_ref")
             if reference:
-                credentials = self.vault.get(reference)
-                item.update(credentials)
+                try:
+                    credentials = self.vault.get(reference)
+                except ProxyProfileError:
+                    item["username"] = ""
+                    item["password"] = ""
+                    item["credentials_unavailable"] = True
+                else:
+                    item.update(credentials)
             else:
                 item["username"] = ""
                 item["password"] = ""
@@ -253,7 +262,11 @@ class ProxyProfileStore:
             new_ref = None
             if username:
                 old_ref = existing.get("secret_ref") if existing else None
-                old_credentials = self.vault.get(old_ref) if old_ref else None
+                try:
+                    old_credentials = self.vault.get(old_ref) if old_ref else None
+                except ProxyProfileError:
+                    # Backups moved to another PC can be reauthorized in the GUI.
+                    old_credentials = None
                 if old_credentials == {"username": username, "password": password}:
                     normalized["secret_ref"] = old_ref
                 else:
@@ -371,17 +384,16 @@ class ProxyProfileStore:
             return None
 
         proxy_profile_id = assignment.get("proxy_profile_id")
-
-        return copy.deepcopy(
-            next(
-                (
-                    item
-                    for item in raw["proxy_profiles"]
-                    if item.get("id") == proxy_profile_id
-                ),
-                None,
-            )
+        selected = next(
+            (item for item in raw["proxy_profiles"] if item.get("id") == proxy_profile_id),
+            None,
         )
+        if selected and selected.get("credentials_unavailable"):
+            raise ProxyProfileError(
+                "El proxy tiene credenciales no disponibles en este equipo. "
+                "Abre su configuracion e introduce usuario y contrasena de nuevo."
+            )
+        return copy.deepcopy(selected)
 
     def _write(self, raw):
         if any("username" in item or "password" in item
