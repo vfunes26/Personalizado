@@ -39,6 +39,12 @@ def test_compilation_helper_checks_actual_pinned_source_and_dependencies():
     assert "Get-FileHash -Algorithm SHA256" in control
     assert "CodigoFuente" not in control  # No blindly trusted stale archive.
     assert "ConfirmarZip $sourceZip" in control
+    # Windows PyInstaller COLLECT can hit MAX_PATH when the long SHA
+    # appears twice in a nested extraction directory.
+    assert "$shortSourceRoot = Join-Path $root 's'" in control
+    assert '$expanded = Join-Path $shortSourceRoot $sha.Substring(0, 12)' in control
+    assert '$source.Length -gt 120' in control
+    assert "$expanded = Join-Path $sourceCache ('Personalizado-' + $sha)" not in control
 
 
 def test_helper_verifies_new_build_before_safely_replacing_old_one():
