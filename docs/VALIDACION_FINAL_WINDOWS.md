@@ -63,8 +63,10 @@ La compilación también comienza desde el mismo doble clic.
 
 Solo después de comprobar que el nuevo ejecutable abre y funciona:
 
-- Haz doble clic en `LimpiarPortable.bat`, o ejecuta
-  `CompilarPortable.bat /limpiar`.
+- Haz doble clic en `LimpiarPortable.bat`, directamente desde la
+  carpeta del ZIP manual si aún no has instalado el controlador actualizado.
+  Se instalará solo y **no ejecutará otra compilación**. O ejecuta
+  `CompilarPortable.bat /limpiar` si el BAT ya está en `C:\\CitaHelper`.
 - El controlador comprobará el portable y pedirá escribir `LIMPIAR`.
 - Elimina `Compilaciones\\Paquetes`, `Compilaciones\\.preparando-*`,
   temporales conocidos `s`, la caché antigua de fuente
