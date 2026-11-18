@@ -146,6 +146,12 @@ try {
     $env:PIP_NO_INDEX = '1'
     $env:PYTHONNOUSERSITE = '1'
     $env:PYTHONUTF8 = '1'
+    # Control de versiones offline antes de generar temporales o compilar.
+    $guard = Join-Path $manualSource 'scripts\check_local_dependencies.py'
+    if (-not (Test-Path -LiteralPath $guard -PathType Leaf)) {
+        throw 'Falta scripts\check_local_dependencies.py en el ZIP.'
+    }
+    EjecutarPython $python @($guard, (Join-Path $manualSource 'uv.lock'))
     # Ninguna llamada a ensure_fpgen_model ni al downloader Camoufox.
     $offlineCheck = @'
 from pathlib import Path
