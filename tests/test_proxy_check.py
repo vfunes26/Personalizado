@@ -4,7 +4,7 @@ import ssl
 import threading
 import time
 
-from app.desktop.proxy_check import check_proxy, normalize_proxy
+from app.desktop.proxy_check import _socks5, check_proxy, normalize_proxy
 
 
 def serve(handler):
@@ -98,3 +98,28 @@ def test_http_proxy_rejects_invalid_portal_certificate(monkeypatch):
         assert 'synthetic' not in detail
     finally:
         server.close()
+
+def test_socks5_consumes_complete_tunnel_reply_before_tls():
+    class FakeSocket:
+        def __init__(self, chunks):
+            self.chunks = list(chunks)
+            self.sent = []
+
+        def sendall(self, data):
+            self.sent.append(data)
+
+        def recv(self, size):
+            chunk = self.chunks.pop(0)
+            assert len(chunk) <= size
+            return chunk
+
+    for atyp, addr_parts in (
+        (1, [b'\x7f\x00\x00\x01']),
+        (3, [b'\x0b', b'example.com']),
+        (4, [b'\x00' * 16]),
+    ):
+        sock = FakeSocket([b'\x05\x00', bytes([5, 0, 0, atyp]), *addr_parts, b'\x01\xbb'])
+        ok, detail = _socks5(sock, '', '')
+        assert ok, detail
+        assert not sock.chunks  # No SOCKS5 response bytes remain before TLS.
+        assert sock.sent[0] == b'\x05\x01\x00'
