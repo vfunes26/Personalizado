@@ -211,7 +211,7 @@ def test_about_includes_version_repository_and_localized_description(window):
     assert dialog.isVisible()
     texts=' '.join(w.text() for w in dialog.findChildren(QLabel))
     assert VERSION in texts
-    assert window.about_dialog.findChild(__import__('PySide6.QtWidgets',fromlist=['QPushButton']).QPushButton,'githubLink').toolTip() == 'https://github.com/itwormz/extranjeria-cita-helper'
+    assert window.about_dialog.findChild(__import__('PySide6.QtWidgets',fromlist=['QPushButton']).QPushButton,'githubLink').toolTip() == 'https://github.com/vfunes26/Personalizado'
     assert 'appointment' in texts.lower()
     dialog.close()
     window.set_language('es');window.about_button.click()
