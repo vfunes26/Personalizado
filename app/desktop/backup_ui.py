@@ -63,6 +63,47 @@ def export_from_window(window):
     )
 
 
+def _suspend_telegram_for_restore(window, *, timeout=10.0):
+    """Stop and JOIN the inbox before changing any profile or database.
+
+    A stop request alone is insufficient: a running Telegram poll may still
+    write a profile. Never restore when its thread has not actually exited.
+    """
+    thread = getattr(window, 'inbox_thread', None)
+    if thread is None:
+        return False
+    thread.stop()
+    thread.join(timeout=timeout)
+    if thread.is_alive():
+        raise BackupError(
+            'El buzón de Telegram no terminó a tiempo. No se modificó ningún dato. '
+            'Cierra la aplicación y vuelve a intentar la restauración.'
+        )
+    window.inbox_thread = None
+    return True
+
+
+def _restore_without_telegram_race(window, source, password):
+    """Restore with no concurrent Telegram writer, also on failure paths."""
+    suspended = _suspend_telegram_for_restore(window)
+    try:
+        return restore_backup(
+            window.store.path.parent, Path(source), password, allow_replace=True
+        )
+    finally:
+        if suspended:
+            # Create a NEW thread against the restored configuration. Never
+            # restart a stopped threading.Thread instance.
+            try:
+                window.sync_telegram_inbox()
+            except (OSError, ValueError, RuntimeError):
+                QMessageBox.warning(
+                    window, 'Telegram',
+                    'Se detuvo Telegram durante la restauración, pero no se pudo '
+                    'reactivar. Reinicia la aplicación antes de volver a usar el buzón.',
+                )
+
+
 def import_into_window(window):
     if _busy(window):
         QMessageBox.warning(window, 'Restauración', 'Detén las búsquedas antes de importar datos.')
@@ -88,7 +129,7 @@ def import_into_window(window):
     if response != QMessageBox.StandardButton.Yes:
         return
     try:
-        count = restore_backup(window.store.path.parent, Path(source), password, allow_replace=True)
+        count = _restore_without_telegram_race(window, source, password)
     except (BackupError, OSError) as exc:
         QMessageBox.warning(window, 'Restauración', str(exc))
         return

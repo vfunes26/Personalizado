@@ -1519,6 +1519,10 @@ class DesktopWindow(QMainWindow):
         try: wanted=self.store.telegram_inbox_enabled()
         except ProfileValidationError: pass
         thread=getattr(self,'inbox_thread',None)
+        if thread is not None and not thread.is_alive():
+            # A previous stop timed out; a dead Thread cannot be restarted.
+            self.inbox_thread=None
+            thread=None
         if wanted and thread is None:
             from ..telegram_inbox import InboxThread, TelegramInbox
             from .notification_store import NotificationVault
