@@ -38,7 +38,7 @@ echo Compilando codigo descomprimido manualmente. Sin descargas de GitHub.
 echo Se conserva Python, Camoufox, FPGen y el portable original del Escritorio.
 echo.
 if exist "%~dp0app\version.py" (
-  powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%CONTROL%" -Proyecto "%~dp0" %*
+  powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%CONTROL%" -Proyecto "%~dp0." %*
 ) else (
   powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%CONTROL%" %*
 )
