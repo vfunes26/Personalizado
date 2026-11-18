@@ -3,10 +3,16 @@ Limpieza opcional DESPUES de abrir y probar el portable Windows.
 Uso: CompilarPortable.bat /limpiar
 Solo elimina duplicados y fuentes descargadas sin .venv ni datos de usuario.
 #>
+param([switch]$SoloVistaPrevia)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 function Avisar([string]$mensaje) { Write-Host ('[CitaHelper] ' + $mensaje) }
+
+# Dos pases: primero solo lectura, despues exclusivamente rutas aprobadas.
+$script:VistaPrevia = $true
+$script:RutasPrevistas = @{}
+$script:ContadorPrevistos = 0
 
 function EliminarSeguro([string]$ruta, [string]$root) {
     if (-not (Test-Path -LiteralPath $ruta)) { return }
@@ -29,6 +35,16 @@ function EliminarSeguro([string]$ruta, [string]$root) {
         if ($links.Count -gt 0) {
             throw ('Hay enlaces en el interior. No se borra: ' + $real)
         }
+    }
+    if ($script:VistaPrevia) {
+        $script:RutasPrevistas[$real] = $true
+        $script:ContadorPrevistos++
+        Avisar ('[VISTA PREVIA] Se eliminaria: ' + $real)
+        return
+    }
+    if (-not $script:RutasPrevistas.ContainsKey($real)) {
+        Avisar ('PROTEGIDO: ruta no incluida en la vista previa: ' + $real)
+        return
     }
     Remove-Item -LiteralPath $real -Recurse -Force -ErrorAction Stop
     Avisar ('Eliminado: ' + $real)
@@ -60,6 +76,32 @@ function RespaldoDuplicado([string]$anterior, [string]$actual) {
     return $true
 }
 
+# El ZIP descargado de GitHub tiene un conjunto de elementos raiz conocido.
+# Si aparecen archivos privados, extraños o enlaces, conservar la carpeta.
+function FuenteManualReconocida([string]$folder) {
+    if (-not (Test-Path -LiteralPath (Join-Path $folder 'scripts\build_desktop_app.py') -PathType Leaf) -or
+        -not (Test-Path -LiteralPath (Join-Path $folder 'uv.lock') -PathType Leaf)) {
+        return $false
+    }
+    foreach ($name in @('.venv','tasks.yml','data','.git','.env')) {
+        if (Test-Path -LiteralPath (Join-Path $folder $name)) { return $false }
+    }
+    $allowed = @(
+        '.coderabbit.yaml','.github','.gitignore','AGENTS.md','CHANGELOG.md',
+        'CODE_OF_CONDUCT.md','CONTRIBUTING.md','CompilarPortable.bat','LICENSE',
+        'LimpiarPortable.bat','README.es.md','README.md','README.ru.md',
+        'SECURITY.md','app','catalogs','docs','greptile.json',
+        'pyproject.toml','scripts','tests','uv.lock'
+    )
+    if (@(Get-ChildItem -LiteralPath $folder -Force |
+          Where-Object { $_.Name -notin $allowed }).Count -gt 0) { return $false }
+    if (@(Get-ChildItem -LiteralPath $folder -Recurse -Force |
+          Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }).Count -gt 0) {
+        return $false
+    }
+    return $true
+}
+
 # Borrar solo el contenido de Personalizado-final; mantener la carpeta.
 function VaciarFuenteManual([string]$root) {
     $proyecto = Join-Path $root 'Proyecto'
@@ -68,8 +110,12 @@ function VaciarFuenteManual([string]$root) {
     }
     $folder = Join-Path $proyecto 'Personalizado-final'
     if (-not (Test-Path -LiteralPath $folder)) {
-        New-Item -ItemType Directory -Path $folder -ErrorAction Stop | Out-Null
-        Avisar ('Carpeta vacia preparada: ' + $folder)
+        if ($script:VistaPrevia) {
+            Avisar ('[VISTA PREVIA] Se prepararia carpeta vacia: ' + $folder)
+        } else {
+            New-Item -ItemType Directory -Path $folder -ErrorAction Stop | Out-Null
+            Avisar ('Carpeta vacia preparada: ' + $folder)
+        }
         return
     }
     if (-not (Test-Path -LiteralPath $folder -PathType Container) -or
@@ -87,42 +133,15 @@ function VaciarFuenteManual([string]$root) {
         Avisar ('Personalizado-final ya esta vacia: ' + $folder)
         return
     }
-    if (-not (Test-Path -LiteralPath (Join-Path $folder 'scripts\build_desktop_app.py') -PathType Leaf) -or
-        -not (Test-Path -LiteralPath (Join-Path $folder 'uv.lock') -PathType Leaf)) {
-        Avisar 'PROTEGIDO Personalizado-final: no se reconoce como ZIP de codigo.'
+    if (-not (FuenteManualReconocida $folder)) {
+        Avisar 'PROTEGIDO Personalizado-final: hay archivos ajenos al ZIP o datos privados.'
         return
-    }
-    if (@(Get-ChildItem -LiteralPath $folder -Recurse -Force |
-          Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }).Count -gt 0) {
-        throw 'Personalizado-final contiene enlaces o junctions; no se borra.'
     }
     foreach ($item in $contenido) { EliminarSeguro $item.FullName $root }
     Avisar ('Personalizado-final VACIA y conservada: ' + $folder)
 }
 
-try {
-    if (-not $env:SystemDrive) { throw 'No se puede localizar el disco del sistema.' }
-    $root = Join-Path $env:SystemDrive 'CitaHelper'
-    $portable = Join-Path $root 'Compilaciones\Cita Extranjeria Helper - Personalizado'
-    foreach ($required in @('Cita Extranjeria Helper.exe','portable.flag',
-        '_internal\bundled-browser\camoufox.exe',
-        '_internal\fpgen\data\fingerprint-network.json.zst')) {
-        if (-not (Test-Path -LiteralPath (Join-Path $portable $required) -PathType Leaf)) {
-            throw ('No se limpia: portable incompleto o ausente. Falta: ' + $required)
-        }
-    }
-    if ((Get-Item -LiteralPath $portable -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) {
-        throw 'La carpeta del portable no puede ser un enlace.'
-    }
-    Write-Host ''
-    Avisar 'Esta limpieza SOLO es adecuada despues de probar que la nueva app abre bien.'
-    Avisar 'Conserva: portable actual, datos privados, .venv y caches UV/Camoufox/FPGen.'
-    Avisar 'Elimina: temporales, fuentes descargadas y respaldos con datos duplicados.'
-    $answer = Read-Host 'Escribe LIMPIAR para ejecutar (otra respuesta cancela)'
-    if ($answer -cne 'LIMPIAR') {
-        Avisar 'Cancelado: nada eliminado.'
-        exit 0
-    }
+function EjecutarLimpieza([string]$root, [string]$portable) {
     $compilaciones = Join-Path $root 'Compilaciones'
     $packages = Join-Path $compilaciones 'Paquetes'
     if (Test-Path -LiteralPath $packages -PathType Container) {
@@ -164,15 +183,10 @@ try {
     if (Test-Path -LiteralPath $proyecto -PathType Container) {
         foreach ($folder in @(Get-ChildItem -LiteralPath $proyecto -Directory)) {
             if ($folder.Name -notlike 'Personalizado-*' -or $folder.Name -eq 'Personalizado-final') { continue }
-            $venv = Test-Path -LiteralPath (Join-Path $folder.FullName '.venv')
-            $private = Test-Path -LiteralPath (Join-Path $folder.FullName 'tasks.yml')
-            $data = Test-Path -LiteralPath (Join-Path $folder.FullName 'data')
-            $git = Test-Path -LiteralPath (Join-Path $folder.FullName '.git')
-            $source = Test-Path -LiteralPath (Join-Path $folder.FullName 'scripts\build_desktop_app.py')
-            if ($source -and -not ($venv -or $private -or $data -or $git)) {
+            if (FuenteManualReconocida $folder.FullName) {
                 EliminarSeguro $folder.FullName $root
             } else {
-                Avisar ('Protegido: ' + $folder.Name + ' (dependencias, datos o carpeta no identificada).')
+                Avisar ('PROTEGIDO: ' + $folder.Name + ' (datos, dependencias o archivos ajenos al ZIP).')
             }
         }
     }
@@ -195,6 +209,48 @@ try {
             EliminarSeguro $respaldos $root
         }
     }
+}
+
+try {
+    if (-not $env:SystemDrive) { throw 'No se puede localizar el disco del sistema.' }
+    $root = Join-Path $env:SystemDrive 'CitaHelper'
+    $portable = Join-Path $root 'Compilaciones\Cita Extranjeria Helper - Personalizado'
+    foreach ($required in @('Cita Extranjeria Helper.exe','portable.flag',
+        '_internal\bundled-browser\camoufox.exe',
+        '_internal\fpgen\data\fingerprint-network.json.zst')) {
+        if (-not (Test-Path -LiteralPath (Join-Path $portable $required) -PathType Leaf)) {
+            throw ('No se limpia: portable incompleto o ausente. Falta: ' + $required)
+        }
+    }
+    if ((Get-Item -LiteralPath $portable -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) {
+        throw 'La carpeta del portable no puede ser un enlace.'
+    }
+    Write-Host ''
+    Avisar 'Esta limpieza SOLO es adecuada despues de probar que la nueva app abre bien.'
+    Avisar 'Conserva: portable actual, datos privados, .venv y caches UV/Camoufox/FPGen.'
+    Avisar 'Elimina: temporales, fuentes descargadas y respaldos con datos duplicados.'
+    Avisar ''
+    Avisar 'VISTA PREVIA: estas son las rutas que se eliminarian.'
+    Avisar ('PROTEGIDO portable actual: ' + $portable)
+    Avisar ('PROTEGIDO datos privados: ' + (Join-Path $portable 'data'))
+    Avisar ('PROTEGIDO .venv: ' + (Join-Path $root 'Proyecto\Personalizado-main\.venv'))
+    Avisar ('PROTEGIDO caches UV/Camoufox/FPGen: ' + (Join-Path $root 'CacheCompilacion'))
+    Avisar ('PROTEGIDO respaldo privado: ' + (Join-Path $root 'RespaldosPrivados'))
+    Avisar 'PROTEGIDO portable original del Escritorio.'
+    EjecutarLimpieza $root $portable
+    Avisar ('[VISTA PREVIA] Total de rutas que se eliminarian: ' + $script:ContadorPrevistos)
+    Avisar 'Los respaldos con datos privados no verificados se conservan.'
+    if ($SoloVistaPrevia) {
+        Avisar 'Modo SOLO VISTA PREVIA: NO se elimino ningun archivo.'
+        exit 0
+    }
+    $answer = Read-Host 'Escribe LIMPIAR para ejecutar las rutas mostradas (otra respuesta cancela)'
+    if ($answer -cne 'LIMPIAR') {
+        Avisar 'Cancelado: nada eliminado.'
+        exit 0
+    }
+    $script:VistaPrevia = $false
+    EjecutarLimpieza $root $portable
     Avisar 'Limpieza de duplicados terminada.'
     Avisar ('Portable actual: ' + $portable)
     Avisar 'Personalizado-final se conserva vacia cuando solo tenia fuentes reconocidas.'
