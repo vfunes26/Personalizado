@@ -255,7 +255,9 @@ Gracias por ayudar a difundir el proyecto:
 4. El portable final es la **carpeta descomprimida**
    `C:\\CitaHelper\\Compilaciones\\Cita Extranjeria Helper - Personalizado`. Al finalizar correctamente se eliminan los archivos ZIP y temporales de ese intento; no se conserva un segundo portable comprimido.
 5. **Abre y prueba manualmente el ejecutable nuevo antes de limpiar más archivos.**
-   Después haz doble clic en `LimpiarPortable.bat` (o usa
+   Después haz doble clic en `LimpiarPortable.bat`, incluso directamente
+   dentro del ZIP fuente recién extraído: instalará los controladores de limpieza
+   en `C:\\CitaHelper` y **no volverá a compilar** (o usa
    `CompilarPortable.bat /limpiar`), escribe `LIMPIAR` para confirmar y
    se quitarán los ZIP antiguos, temporales `.preparando-*`, fuentes manuales sin
    `.venv` y la caché antigua de código fuente.
