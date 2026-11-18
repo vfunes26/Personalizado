@@ -52,7 +52,7 @@ def test_download_verifies_checksum_and_never_keeps_corrupt_payload(tmp_path,mon
     output.with_name(output.name+'.provenance.json').unlink()
     def bad(url):
         import io
-        return io.BytesIO((digest+'  '+item.name+'\n').encode() if url.endswith('SHA256SUMS') else b'bad')
+        return io.BytesIO((digest+'  '+item.name+'\n').encode() if url.endswith('SHA256SUMS') else b'damaged')
     with pytest.raises(ValueError):download_release(item,tmp_path,threading.Event(),fetch=bad)
     assert not list(tmp_path.iterdir())
 
