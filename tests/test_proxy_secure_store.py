@@ -107,11 +107,29 @@ def test_missing_native_secret_fails_closed_without_plaintext_fallback(tmp_path)
     backend = FakeKeyring()
     path = tmp_path / "proxy-profiles.json"
     store = store_at(path, backend)
-    store.save_proxy_profile(None, profile())
+    proxy_id = store.save_proxy_profile(None, profile())
+    store.bind_request_profile("request_a", proxy_id, enabled=True)
     backend.secrets.clear()
-    with pytest.raises(ProxyProfileError):
-        store.load()
+    visible = store.load()["proxy_profiles"][0]
+    assert visible["credentials_unavailable"] is True
+    assert visible["username"] == ""
+    assert visible["password"] == ""
+    with pytest.raises(ProxyProfileError, match="credenciales no disponibles"):
+        store.proxy_for_request("request_a")
     assert "password" not in raw_record(path)
+
+
+def test_missing_native_secret_can_be_reauthorized_without_recreating_profile(tmp_path):
+    backend = FakeKeyring()
+    path = tmp_path / "proxy-profiles.json"
+    store = store_at(path, backend)
+    proxy_id = store.save_proxy_profile(None, profile())
+    store.bind_request_profile("request_a", proxy_id, enabled=True)
+    backend.secrets.clear()
+    assert store.load()["proxy_profiles"][0]["credentials_unavailable"]
+    assert store.save_proxy_profile(proxy_id, profile(password="new_secret")) == proxy_id
+    assert store.proxy_for_request("request_a")["password"] == "new_secret"
+    assert "new_secret" not in path.read_text(encoding="utf-8")
 
 
 def test_failed_new_secret_does_not_write_plaintext_json(tmp_path):
