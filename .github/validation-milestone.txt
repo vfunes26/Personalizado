@@ -3,3 +3,6 @@ Ajustes: 7 y 8
 Tipo: Tests — pruebas unitarias y de interfaz Qt en modo offscreen
 Objetivo: respaldos cifrados, configuración Gmail SMTP, regresión general
 Sin compilación portable ni publicación de releases
+
+Corrección posterior al fallo Tests #16: método QLineEdit.setMaxLength
+Revalidar toda la suite en GitHub Actions
