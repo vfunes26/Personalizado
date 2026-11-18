@@ -211,6 +211,19 @@ class NotificationPanel(QWidget):
             box=edit.parentWidget()
             if isinstance(box,ActionField):edit.setPlaceholderText(self.owner.t(box.caption.property('notificationSource') or ''))
 
+    def global_bot_token(self):
+        """Use the independently configured bot when available."""
+        from .telegram_global import TelegramGlobalStore, TelegramGlobalError
+        try:
+            data = TelegramGlobalStore(
+                self.owner.store.path.parent, vault=self.vault).credentials()
+        except TelegramGlobalError as exc:
+            raise NotificationError(str(exc)) from None
+        return data['token'] if data else ''
+
+    def active_bot_token(self):
+        return self.global_bot_token() or self.token.text().strip()
+
     def ensure_secrets_loaded(self):
         if not self.secrets_loaded:self.load(self.config)
 
@@ -246,14 +259,41 @@ class NotificationPanel(QWidget):
             id_label=text(self.owner,'',True);id_label.setProperty('notificationData',True);id_label.setText('· '+recipient['id']);names.addWidget(id_label);names.addStretch();row.addLayout(names,1)
             test=TestButton(self.owner);test.setProperty('recipientId',recipient['id'])
             test.setToolTip(self.owner.t('Отправить тест этому получателю'));test.clicked.connect(lambda checked=False,r=copy.deepcopy(recipient),b=test:self.test_recipient(r,b));row.addWidget(test)
+            preferences=button(self.owner,'Eventos');preferences.setObjectName('configureRecipientEvents')
+            preferences.clicked.connect(lambda checked=False,r=recipient:self.configure_recipient_events(r))
+            row.addWidget(preferences)
             remove=tool(self.owner,'trash','Удалить получателя');remove.clicked.connect(lambda checked=False,r=recipient:self.remove_recipient(r));row.addWidget(remove);self.recipient_list.addWidget(widget)
+
+    def configure_recipient_events(self,recipient):
+        dialog=QDialog(self)
+        dialog.setWindowTitle('Notificaciones para '+recipient.get('label',recipient['id']))
+        layout=QVBoxLayout(dialog)
+        layout.addWidget(text(self.owner,'Selecciona las alertas que recibirá este destinatario:'))
+        selected=recipient.get('events',self.telegram_events.value())
+        checks={}
+        for name in EVENTS:
+            check=QCheckBox(self.owner.t(EVENT_LABELS[name]))
+            check.setChecked(name in selected)
+            checks[name]=check
+            layout.addWidget(check)
+        controls=QHBoxLayout()
+        cancel=QPushButton('Cancelar');cancel.clicked.connect(dialog.reject)
+        save=QPushButton('Guardar');save.clicked.connect(dialog.accept)
+        controls.addWidget(cancel);controls.addWidget(save)
+        layout.addLayout(controls)
+        if dialog.exec()==QDialog.DialogCode.Accepted:
+            recipient['events']=[name for name in EVENTS if checks[name].isChecked()]
+            self.render_recipients()
 
     def remove_recipient(self,recipient):self.recipients.remove(recipient);self.render_recipients()
 
     def add_recipient(self):
-        try:Telegram(self.token.text().strip())
-        except NotificationError as exc:self.telegram_status.show();self.telegram_status.setText(self.owner.t(str(exc)));return
-        dialog=RecipientDialog(self.owner,self.token.text().strip())
+        try:
+            token = self.active_bot_token()
+            Telegram(token)
+        except NotificationError as exc:
+            self.telegram_status.show();self.telegram_status.setText(self.owner.t(str(exc)));return
+        dialog=RecipientDialog(self.owner,token)
         if dialog.exec()==QDialog.DialogCode.Accepted:
             if not any(r['id']==dialog.recipient['id'] for r in self.recipients):self.recipients.append(dialog.recipient)
             self.render_recipients()
@@ -269,7 +309,10 @@ class NotificationPanel(QWidget):
         self.jobs.submit(work,done)
 
     def verify_bot(self):
-        token=self.token.text().strip()
+        try:
+            token=self.active_bot_token()
+        except NotificationError as exc:
+            self.telegram_status.show();self.telegram_status.setText(str(exc));return
         def done(value):
             if self.token.text().strip()==token:self.bot_status.setText('@'+value['username'])
             if self.token.text().strip()==token:self.telegram_status.hide()
@@ -285,7 +328,10 @@ class NotificationPanel(QWidget):
         return elapsed
 
     def test_recipient(self,recipient,control):
-        token=self.token.text().strip()
+        try:
+            token=self.active_bot_token()
+        except NotificationError as exc:
+            self.telegram_status.show();self.telegram_status.setText(str(exc));return
         event=make_event('test',self.owner.fields['label'].text().strip(),self.owner.fields['province'].currentText(),self.owner.preferences['language'])
         generation=self.generation
         control.start(self.jobs,lambda:self.send_test_with_template(token,recipient['id'],event['message']),
@@ -307,17 +353,22 @@ class NotificationPanel(QWidget):
         if not self.secrets_loaded:return config,created,old
         try:
             token=self.token.text().strip();hook=self.hook_config()
-            for channel,replacement in (('telegram',token),('webhook',hook.get('url'))):
+            global_token=self.global_bot_token()
+            for channel,replacement in (('telegram',token or global_token),('webhook',hook.get('url'))):
                 if (channel in self.load_errors and getattr(self,channel+'_toggle').isChecked()
                         and not replacement):
                     raise NotificationError(self.load_errors[channel])
             if self.telegram_toggle.isChecked():
-                Telegram(token)
-                if not self.recipients:raise NotificationError('Добавить получателя кнопкой «+».')
+                Telegram(token or global_token)
+                if not self.recipients and not global_token:
+                    raise NotificationError('Добавить получателя кнопкой «+».')
             if self.webhook_toggle.isChecked():validate_webhook(hook)
-            for channel,secret in [('telegram',{'token':token} if token else {}),('webhook',hook if hook.get('url') else {})]:
+            for channel,secret in [('telegram',{'token':token} if token and not global_token else {}),('webhook',hook if hook.get('url') else {})]:
                 entry=config[channel];entry['enabled']=getattr(self,channel+'_toggle').isChecked();entry['events']=getattr(self,channel+'_events').value()
                 if channel=='telegram':entry['recipients']=copy.deepcopy(self.recipients)
+                if channel=='telegram' and global_token:
+                    # Per-profile token remains intact until the global bot is disabled.
+                    continue
                 if channel in self.load_errors and not entry['enabled']:
                     # Disabling must work offline and must not erase an unreadable secret.
                     continue
