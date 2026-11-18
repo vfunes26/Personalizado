@@ -134,6 +134,6 @@ def test_cleanup_releases_extracted_source_directory_before_removal():
     assert 'cd /d "%RAIZ%"' in cleaner
     assert 'start "" /D "%RAIZ%" "%RAIZ%\\CompilarPortable.bat" /limpiar' in cleaner
     assert cleaner.index('cd /d "%RAIZ%"') < cleaner.index('start "" /D')
-    cleanup_branch = launcher.split(':limpiar\n', 1)[1].split(':resultado\n', 1)[0]
+    cleanup_branch = launcher.split('\n:limpiar\n', 1)[1].split('\n:resultado\n', 1)[0]
     assert 'cd /d "%RAIZ%"' in cleanup_branch
     assert cleanup_branch.index('cd /d "%RAIZ%"') < cleanup_branch.index('powershell.exe')
