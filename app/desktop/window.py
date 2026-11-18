@@ -2123,7 +2123,9 @@ class DesktopWindow(QMainWindow):
         self.update_install_requested=False
         if reason=='provenance':self.update_path=None
         self.update_message={'provenance':'Не удалось подтвердить происхождение обновления. Установка заблокирована.',
-                             'no_release':'Релиз ещё не опубликован','cancelled':'Скачивание отменено',
+                             'no_release':'Релиз ещё не опубликован',
+                             'cancelled':'Descarga pausada. Puedes pulsar Descargar para continuar.',
+                             'network_download':'Conexión interrumpida. Datos guardados; pulsa Descargar para continuar.',
                              'network':'Не удалось проверить обновления. Повторить попытку позже.'}.get(reason,'Не удалось проверить или скачать обновление. Повторить попытку позже.')
         self.render_updates()
 
