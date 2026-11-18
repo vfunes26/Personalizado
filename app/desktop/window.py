@@ -1276,6 +1276,16 @@ class DesktopWindow(QMainWindow):
                 if self.proxy_toggle.isChecked()
                 else 'Conexión normal del equipo. No se utilizará ningún proxy.'
             )
+            selected = next(
+                (item for item in store.load()['proxy_profiles']
+                 if item.get('id') == self.proxy_selector.currentData()),
+                None,
+            )
+            if selected and selected.get('credentials_unavailable'):
+                self.proxy_status.setText(
+                    'Credenciales no disponibles en este Windows. '
+                    'Vuelve a introducir usuario y contraseña y guarda el proxy.'
+                )
         except (OSError,ValueError) as exc:
             self.proxy_toggle.setChecked(False)
             self.proxy_status.setText(str(exc))
@@ -1297,6 +1307,8 @@ class DesktopWindow(QMainWindow):
         self.proxy_server_input.setText(proxy.get('server','') if proxy else '')
         self.proxy_username_input.setText(proxy.get('username','') if proxy else '')
         self.proxy_password_input.setText(proxy.get('password','') if proxy else '')
+        if proxy and proxy.get('credentials_unavailable'):
+            self.proxy_status.setText('Credenciales no disponibles en este Windows. Vuelve a introducir usuario y contraseña y guarda el proxy.')
         self.proxy_delete_button.setEnabled(proxy is not None)
 
     def new_proxy_definition(self):
