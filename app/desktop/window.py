@@ -878,6 +878,7 @@ class DesktopWindow(QMainWindow):
         if not hasattr(self, 'profile_delete_jobs'):
             self.profile_delete_jobs = NotificationJobs(self)
         button = self.findChild(QPushButton, 'deleteProfile')
+        self._profile_deletion_busy = True
         button.setEnabled(False)
         service = ProfileDeletionService(self.store, vault=NotificationVault())
         revision = self.store.revision()
@@ -889,6 +890,7 @@ class DesktopWindow(QMainWindow):
 
     def _finish_profile_deletion(self, ok, result):
         button = self.findChild(QPushButton, 'deleteProfile')
+        self._profile_deletion_busy = False
         button.setEnabled(True)
         if not ok:
             QMessageBox.warning(self, 'Eliminar perfil', str(result))
@@ -908,7 +910,7 @@ class DesktopWindow(QMainWindow):
     def update_profile_summary(self, *_):
         profile_id=self.settings_profile_combo.currentData()
         self.findChild(QPushButton,'editProfile').setEnabled(bool(profile_id))
-        self.findChild(QPushButton,'deleteProfile').setEnabled(bool(profile_id))
+        self.findChild(QPushButton,'deleteProfile').setEnabled(bool(profile_id) and not getattr(self, '_profile_deletion_busy', False))
         if not profile_id:
             self.profile_summary.clear()
             return
@@ -1554,6 +1556,7 @@ class DesktopWindow(QMainWindow):
         added=ids-known
         self._known_profile_ids=ids
         self.refresh_profiles()
+        self.workers_panel.refresh_combos()
         if added: self.statusBar().showMessage(self.t('Профиль создан из Telegram'),8000)
 
     def save_preferences(self):
