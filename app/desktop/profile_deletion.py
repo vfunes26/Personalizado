@@ -52,10 +52,10 @@ def profile_receipt(raw, profile_id):
     protection = request.get('appointment_protection')
     if isinstance(protection, dict):
         # Profile request settings, not browser sessions or notification secrets.
-        rows.append(('Protección de citas', json.dumps(protection, ensure_ascii=False, sort_keys=True)))
+        rows.append(('Protección de citas', json.dumps(protection, ensure_ascii=False, sort_keys=True, default=str)))
     timings = raw.get('timings')
     if isinstance(timings, dict):
-        rows.append(('Temporizadores', json.dumps(timings, ensure_ascii=False, sort_keys=True)))
+        rows.append(('Temporizadores', json.dumps(timings, ensure_ascii=False, sort_keys=True, default=str)))
     return '\n'.join(f'{title}: {str(value)}' for title, value in rows)
 
 
@@ -166,7 +166,12 @@ class ProfileDeletionService:
             raise ProfileDeletionError('No se pudo eliminar el perfil con seguridad.') from None
         warnings = self._cleanup_bindings(profile_id)
         self._release_secret(deleted)
-        self._audit(profile_id, origin, 'deleted')
+        try:
+            self._audit(profile_id, origin, 'deleted')
+        except (OSError, ProfileDeletionError):
+            # The profile is already gone. Return truthful success with a
+            # warning instead of telling the user that deletion failed.
+            warnings.append('auditoría')
         subject = 'Cita Extranjería Helper — perfil eliminado'
         message = ('Se confirmó la eliminación desde ' + origin + '.\n'
                    'Fecha UTC: ' + datetime.now(timezone.utc).isoformat() + '\n\n'
@@ -175,7 +180,13 @@ class ProfileDeletionService:
         try:
             self.mail.send(subject, message)
         except (GmailError, NotificationError, OSError):
-            self._audit(profile_id, origin, 'gmail_failed')
+            try:
+                self._audit(profile_id, origin, 'gmail_failed')
+            except (OSError, ProfileDeletionError):
+                warnings.append('auditoría')
             return {'deleted': True, 'emailed': False, 'warnings': warnings}
-        self._audit(profile_id, origin, 'gmail_sent')
+        try:
+            self._audit(profile_id, origin, 'gmail_sent')
+        except (OSError, ProfileDeletionError):
+            warnings.append('auditoría')
         return {'deleted': True, 'emailed': True, 'warnings': warnings}
