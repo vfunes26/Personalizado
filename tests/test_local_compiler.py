@@ -125,3 +125,15 @@ def test_compiler_from_manual_source_is_immune_to_unwanted_private_files():
     assert "Join-Path $toRoot 'data'" in control
     assert "Join-Path $toRoot 'tasks.yml'" in control
     assert 'No se permite empaquetar perfiles o datos privados.' in control
+
+
+def test_cleanup_releases_extracted_source_directory_before_removal():
+    """Both entry points detach CMD and its PowerShell child from the source dir."""
+    cleaner = (ROOT / 'LimpiarPortable.bat').read_text(encoding='utf-8')
+    launcher = (ROOT / 'CompilarPortable.bat').read_text(encoding='utf-8')
+    assert 'cd /d "%RAIZ%"' in cleaner
+    assert 'start "" /D "%RAIZ%" "%RAIZ%\\CompilarPortable.bat" /limpiar' in cleaner
+    assert cleaner.index('cd /d "%RAIZ%"') < cleaner.index('start "" /D')
+    cleanup_branch = launcher.split(':limpiar\n', 1)[1].split(':resultado\n', 1)[0]
+    assert 'cd /d "%RAIZ%"' in cleanup_branch
+    assert cleanup_branch.index('cd /d "%RAIZ%"') < cleanup_branch.index('powershell.exe')

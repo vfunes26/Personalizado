@@ -45,6 +45,9 @@ if exist "%~dp0app\version.py" (
 set "RESULTADO=%ERRORLEVEL%"
 goto :resultado
 :limpiar
+rem PowerShell no debe heredar como directorio actual las fuentes que eliminara.
+cd /d "%RAIZ%"
+if errorlevel 1 goto :error
 if not exist "%LIMPIADOR%" (
   echo [ERROR] Falta %LIMPIADOR%.
   echo Copia limpiar_portable.ps1 desde el ZIP extraido a %RAIZ%.
