@@ -1,4 +1,5 @@
-Validación manualmente aprobada por rondas
-Ajustes: 5 y 6
-Tipo: pruebas unitarias y de interfaz en modo offscreen
-Sin compilación ni publicación de archivos
+Validación aprobada por rondas de ajustes
+Ajustes: 7 y 8
+Tipo: Tests — pruebas unitarias y de interfaz Qt en modo offscreen
+Objetivo: respaldos cifrados, configuración Gmail SMTP, regresión general
+Sin compilación portable ni publicación de releases
