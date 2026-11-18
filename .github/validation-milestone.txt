@@ -23,3 +23,5 @@ Ronda 1 2026-11-18: ajuste 1 validacion de portable Windows; ajuste 2 uv.lock ve
 Ronda 2 2026-11-18: reparacion sintaxis PowerShell real; ajuste 3 integridad SHA-256 y smoke del portable instalado; ajuste 4 credenciales proxy en gestor nativo y migracion atomica sin plaintext.
 
 Ronda 2 revalidacion final 2026-11-18: proxy en WinVault, restauracion portable entre equipos con reautorizacion segura, SHA-256 antes de omitir compilacion y parser PowerShell.
+
+Ronda 2 cierre de regresiones 2026-11-18: pruebas Qt/Camoufox usan vault nativo simulado en Linux sin permitir almacenamiento de contrasenas en archivo.
