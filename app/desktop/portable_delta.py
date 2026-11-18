@@ -38,6 +38,7 @@ class DeltaIncompatible(DeltaError):
 def _path(value):
     if (not isinstance(value, str) or not value or len(value) > 480 or
             value.startswith('/') or '\\' in value or ':' in value or
+            any(char in value for char in '<>"|?*') or
             any(ord(ch) < 32 or ord(ch) == 127 for ch in value)):
         raise DeltaError('Ruta no permitida en el paquete diferencial.')
     path = PurePosixPath(value)
@@ -45,7 +46,8 @@ def _path(value):
             part.endswith(('.', ' ')) or RESERVED.fullmatch(part)
             for part in value.split('/'))):
         raise DeltaError('Ruta no permitida en el paquete diferencial.')
-    if value == 'tasks.yml' or value.startswith('data/'):
+    lower = value.casefold()
+    if lower in {'tasks.yml', 'data'} or lower.startswith('data/'):
         raise DeltaError('Un paquete diferencial no puede contener datos privados.')
     return path
 
