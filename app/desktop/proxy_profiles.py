@@ -229,6 +229,16 @@ class ProxyProfileStore:
 
             self._write(raw)
 
+    def unbind_request_profile(self, request_profile_id):
+        """Discard only this application's obsolete proxy binding."""
+        from ..locking import locked_file
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with locked_file(self.path.with_name("." + self.path.name + ".lock")):
+            raw = self._read()
+            if request_profile_id in raw['assignments']:
+                raw['assignments'].pop(request_profile_id)
+                self._write(raw)
+
     def assignment_for(self, request_profile_id):
         raw = self._read()
         assignment = raw["assignments"].get(request_profile_id, {})
