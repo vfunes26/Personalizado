@@ -91,9 +91,36 @@ def _socks5(sock, username, password):
     host = TARGET_HOST.encode('ascii')
     sock.sendall(b'\x05\x01\x00\x03' + bytes([len(host)]) + host + TARGET_PORT.to_bytes(2, 'big'))
     answer = _read_exact(sock, 4)
+    if answer[0] != 5 or answer[2] != 0:
+        return False, 'Respuesta SOCKS5 invalida'
     if answer[1] != 0:
         return False, f'El proxy SOCKS5 no pudo abrir el tunel (codigo {answer[1]})'
+    # Consume the complete BND.ADDR and BND.PORT. Leaving reply bytes in
+    # the stream corrupts the subsequent TLS handshake.
+    address_type = answer[3]
+    if address_type == 1:       # IPv4
+        _read_exact(sock, 4)
+    elif address_type == 4:     # IPv6
+        _read_exact(sock, 16)
+    elif address_type == 3:     # Domain name
+        _read_exact(sock, _read_exact(sock, 1)[0])
+    else:
+        return False, 'Tipo de direccion SOCKS5 desconocido'
+    _read_exact(sock, 2)  # BND.PORT
     return True, 'Proxy operativo'
+
+
+def _validate_destination_tls(sock):
+    """Verify the portal's TLS certificate through the established proxy tunnel.
+
+    Never disable hostname verification or permit an untrusted issuer. The
+    browser uses its own trust store, so its result may still differ.
+    """
+    secured = ssl.create_default_context().wrap_socket(sock, server_hostname=TARGET_HOST)
+    try:
+        return True, 'Tunel y certificado HTTPS del portal verificados'
+    finally:
+        secured.close()
 
 
 def check_proxy(server, username='', password='', timeout=8.0):
@@ -119,10 +146,23 @@ def check_proxy(server, username='', password='', timeout=8.0):
     try:
         raw.settimeout(timeout)
         if scheme == 'socks5':
-            return _socks5(raw, username or '', password or '')
+            ok, detail = _socks5(raw, username or '', password or '')
+        else:
+            if scheme == 'https':
+                sock = ssl.create_default_context().wrap_socket(raw, server_hostname=host)
+            ok, detail = _http_connect(sock, username or '', password or '')
+        if not ok:
+            return False, detail
         if scheme == 'https':
-            sock = ssl.create_default_context().wrap_socket(raw, server_hostname=host)
-        return _http_connect(sock, username or '', password or '')
+            # Python ssl cannot wrap an SSLSocket as another SSLSocket. Do not
+            # claim that testing the TLS connection to the proxy tested the
+            # destination certificate too (TLS-in-TLS is different).
+            return True, 'Tunel operativo; certificado HTTPS del portal no verificado (proxy HTTPS)'
+        return _validate_destination_tls(sock)
+    except ssl.SSLCertVerificationError:
+        return False, 'Certificado HTTPS no confiable o no valido (posible proxy interceptando TLS)'
+    except ssl.SSLError:
+        return False, 'No se pudo establecer TLS valido a traves del proxy'
     except socket.timeout:
         return False, f'El proxy {host}:{port} no respondio a tiempo'
     except (OSError, ssl.SSLError, ValueError) as exc:
