@@ -11,7 +11,7 @@ from app.desktop import portable_delta as delta
 OLD = {
     'portable.flag': b'',
     'Cita Extranjeria Helper.exe': b'old-executable',
-    '_internal/bundled-browser/camoufox.exe': b'B' * 8192,
+    '_internal/bundled-browser/camoufox.exe': b''.join(hashlib.sha256(str(i).encode()).digest() for i in range(512)),
     '_internal/bundled-browser/fonts/f1.ttf': b'F' * 4096,
     '_internal/PySide6/core.pyd': b'C' * 1024,
 }
