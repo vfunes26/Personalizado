@@ -184,3 +184,23 @@ def test_powershell_parser_in_ci_and_cleanup_regex_not_truncated():
     assert 'pwsh -NoProfile -NonInteractive -File scripts/check_powershell_syntax.ps1' in action
     parser = (ROOT / 'scripts/check_powershell_syntax.ps1').read_text(encoding='utf-8')
     assert '[System.Management.Automation.Language.Parser]::ParseFile' in parser
+
+
+def test_protected_cleanup_previews_before_password_and_only_deletes_approved_paths():
+    cleanup = (ROOT / 'scripts/limpiar_portable.ps1').read_text(encoding='utf-8')
+    assert 'param([switch]$SoloVistaPrevia)' in cleanup
+    assert '$script:VistaPrevia = $true' in cleanup
+    assert "Avisar ('[VISTA PREVIA] Se eliminaria: ' + $real)" in cleanup
+    assert 'if (-not $script:RutasPrevistas.ContainsKey($real))' in cleanup
+    assert 'PROTEGIDO: ruta no incluida en la vista previa' in cleanup
+    assert cleanup.count('EjecutarLimpieza $root $portable') == 2
+    first = cleanup.index('EjecutarLimpieza $root $portable')
+    confirmation = cleanup.index("Read-Host 'Escribe LIMPIAR")
+    second = cleanup.rindex('EjecutarLimpieza $root $portable')
+    assert first < confirmation < second
+    assert cleanup.index('$script:VistaPrevia = $false') > confirmation
+    assert 'if ($SoloVistaPrevia)' in cleanup
+    assert 'function FuenteManualReconocida' in cleanup
+    assert 'bundle-esencial.sha256' in cleanup
+    assert "'Personalizado-final') { continue }" in cleanup
+    assert 'VaciarFuenteManual $root' in cleanup

@@ -55,7 +55,8 @@ function EliminarSeguro([string]$ruta, [string]$root) {
 function RespaldoDuplicado([string]$anterior, [string]$actual) {
     if ((Get-Item -LiteralPath $anterior -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { return $false }
     $esperados = @('Cita Extranjeria Helper.exe','LICENSE.txt','portable.flag',
-                   'codigo-commit.txt','codigo-fuente-local.sha256','_internal','data')
+                   'codigo-commit.txt','codigo-fuente-local.sha256',
+                   'bundle-esencial.sha256','_internal','data')
     if (@(Get-ChildItem -LiteralPath $anterior -Force |
           Where-Object { $_.Name -notin $esperados }).Count -gt 0) { return $false }
     if (@(Get-ChildItem -LiteralPath $anterior -Recurse -Force |
@@ -205,7 +206,15 @@ function EjecutarLimpieza([string]$root, [string]$portable) {
                 Avisar ('Respaldo PROTEGIDO por datos no verificados: ' + $anterior.Name)
             }
         }
-        if (@(Get-ChildItem -LiteralPath $respaldos -Force).Count -eq 0) {
+        if ($script:VistaPrevia) {
+            # La carpeta Respaldos solo se propone si todos sus elementos
+            # fueron revisados y no contienen datos privados exclusivos.
+            $conservar = @(Get-ChildItem -LiteralPath $respaldos -Force |
+                           Where-Object { -not $script:RutasPrevistas.ContainsKey($_.FullName) })
+            if ($conservar.Count -eq 0) {
+                EliminarSeguro $respaldos $root
+            }
+        } elseif (@(Get-ChildItem -LiteralPath $respaldos -Force).Count -eq 0) {
             EliminarSeguro $respaldos $root
         }
     }
