@@ -34,7 +34,7 @@ function LocalizarPython([string]$root) {
 }
 
 function ConfirmarZip([string]$path) {
-    Add-Type -AssemblyName System.IO.Compression
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
     $archive = [System.IO.Compression.ZipFile]::OpenRead($path)
     try {
         if ($archive.Entries.Count -lt 20) {
@@ -211,7 +211,7 @@ print('Camoufox, FPGen y dependencias: disponibles SIN descargar.')
     }
 
     # Extraer ANTES de tocar la version anterior, sobre el mismo disco.
-    $candidateParent = Join-Path $builds ('.preparando-' + $sha.Substring(0, 12))
+    $candidateParent = Join-Path $builds ('.preparando-' + $sha.Substring(0, 12) + '-' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
     if (Test-Path -LiteralPath $candidateParent) {
         throw 'Existe una preparacion previa. Revisala antes de volver a ejecutar el BAT.'
     }
@@ -238,6 +238,12 @@ print('Camoufox, FPGen y dependencias: disponibles SIN descargar.')
         }
     }
 
+    # Guardar el ZIP verificado antes de cambiar la version anterior.
+    $packages = Join-Path $builds ('Paquetes\' + $sha.Substring(0, 12))
+    New-Item -ItemType Directory -Force -Path $packages | Out-Null
+    Copy-Item -LiteralPath $zip -Destination (Join-Path $packages $name) -ErrorAction Stop
+    Copy-Item -LiteralPath $hashfile -Destination (Join-Path $packages ($name + '.sha256')) -ErrorAction Stop
+
     # Conservar un respaldo antes del reemplazo; restaurar si hay error.
     $respaldo = $null
     if (Test-Path -LiteralPath $ready -PathType Container) {
@@ -258,11 +264,6 @@ print('Camoufox, FPGen y dependencias: disponibles SIN descargar.')
         }
         throw 'La instalacion local fallo; se intento restaurar el respaldo.'
     }
-
-    $packages = Join-Path $builds ('Paquetes\' + $sha.Substring(0, 12))
-    New-Item -ItemType Directory -Force -Path $packages | Out-Null
-    Copy-Item -LiteralPath $zip -Destination (Join-Path $packages $name) -ErrorAction Stop
-    Copy-Item -LiteralPath $hashfile -Destination (Join-Path $packages ($name + '.sha256')) -ErrorAction Stop
 
     Avisar 'COMPILACION FINALIZADA.'
     Avisar ('Portable nuevo: ' + $ready)
