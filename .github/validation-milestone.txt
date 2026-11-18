@@ -3,3 +3,5 @@ Ajustes: 15 y 16
 Tipo: GitHub Actions Tests, unidad, Qt offscreen y preservación de datos
 Cobertura: BAT de compilación local, Camoufox y FPGen offline, respaldo AES-GCM, perfiles, Gmail, proxy, trabajadores, SQLite y migración SHA-256
 No se compila Windows en Actions, no se descargan modelos ni se publica release
+
+Corrección Windows MAX_PATH 2026-11-18: compilar desde CitaHelper\\s\\<sha12>, mantener ZIP cache; pruebas de regresión
