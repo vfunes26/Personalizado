@@ -192,3 +192,58 @@ def test_project_updater_refuses_old_repository_assets():
             'vfunes26/Personalizado', 'itwormz/extranjeria-cita-helper')
     with pytest.raises(ValueError):
         select_release(old, '0.1.0', 'windows', 'x64')
+
+
+def test_portable_update_selects_optional_verified_delta_asset():
+    from app.desktop.updates import select_release
+    from app.desktop.portable_delta import delta_asset_name
+    data = release('0.2.0')
+    base = data['assets'][0]['browser_download_url'].rsplit('/',1)[0] + '/'
+    original = data['assets'][0]['name']
+    full = original.replace('.msi','-portable.zip')
+    data['assets'][0]['name'] = full
+    data['assets'][0]['browser_download_url'] = base + full
+    data['assets'][0]['size'] = 100
+    data['assets'][2]['name'] = full + '.sigstore.json'
+    data['assets'][2]['browser_download_url'] = base + full + '.sigstore.json'
+    patch = delta_asset_name(full,'0.1.0')
+    data['assets'] += [
+        {'name':patch, 'browser_download_url':base+patch, 'size':15},
+        {'name':patch+'.sigstore.json',
+         'browser_download_url':base+patch+'.sigstore.json','size':250},
+    ]
+    result = select_release(data, '0.1.0', 'windows','x64',portable=True)
+    assert result.name == full
+    assert result.delta is not None
+    assert result.delta.name == patch
+    assert result.delta.size < result.size
+    assert result.delta.url.startswith('https://github.com/vfunes26/Personalizado/')
+    assert select_release(data,'0.1.0','windows','x64').delta is None
+    # Missing signature -> do not choose a delta.
+    data['assets'].pop()
+    assert select_release(data,'0.1.0','windows','x64',portable=True).delta is None
+    # A signed delta that is no smaller is not useful.
+    data['assets'] += [
+        {'name':patch+'.sigstore.json','browser_download_url':base+patch+'.sigstore.json','size':250},
+    ]
+    data['assets'][-2]['size']=100
+    assert select_release(data,'0.1.0','windows','x64',portable=True).delta is None
+
+
+def test_delta_update_never_trusts_assets_from_old_repository():
+    from app.desktop.updates import select_release
+    from app.desktop.portable_delta import delta_asset_name
+    data = release('0.2.0')
+    base = data['assets'][0]['browser_download_url'].rsplit('/',1)[0]+'/'
+    old_name=data['assets'][0]['name']
+    portable=old_name.replace('.msi','-portable.zip')
+    data['assets'][0].update(name=portable,browser_download_url=base+portable,size=100)
+    data['assets'][2].update(name=portable+'.sigstore.json',
+                             browser_download_url=base+portable+'.sigstore.json')
+    patch=delta_asset_name(portable,'0.1.0')
+    data['assets'] += [
+        {'name':patch,'browser_download_url':'https://github.com/itwormz/extranjeria-cita-helper/'+patch,'size':5},
+        {'name':patch+'.sigstore.json',
+         'browser_download_url':base+patch+'.sigstore.json','size':200},
+    ]
+    assert select_release(data,'0.1.0','windows','x64',portable=True).delta is None
