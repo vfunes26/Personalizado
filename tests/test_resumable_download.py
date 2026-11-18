@@ -213,3 +213,19 @@ def test_full_release_resumed_and_sigstore_verified_before_publication(tmp_path,
     assert checked == [(release.name,DIGEST,release.version,'b'*40)]
     assert updates.checksum_for(result.with_name(result.name+'.sha256').read_bytes(),result.name)==DIGEST
     assert not part.exists() and not meta.exists()
+
+
+def test_corrupt_completed_download_is_not_downloaded_twice(tmp_path):
+    release = item()
+    calls = []
+
+    def fetching(url, *, headers=None):
+        calls.append(headers)
+        return Reply(b'X' * len(PAYLOAD))
+
+    with pytest.raises(ValueError, match='checksum mismatch'):
+        resumable.fetch_package(release, tmp_path, DIGEST,
+                                threading.Event(), fetch=fetching)
+    assert calls == [None]  # Do not waste another full download on mobile data.
+    assert not (tmp_path / (release.name + '.part')).exists()
+    assert not (tmp_path / (release.name + '.part.json')).exists()
