@@ -250,8 +250,8 @@ Gracias por ayudar a difundir el proyecto:
 **Modalidad manual, sin descargar el código desde el BAT:**
 
 1. Descarga tú mismo el ZIP de [Personalizado / main](https://github.com/vfunes26/Personalizado/archive/refs/heads/main.zip) y descomprímelo en `C:\\CitaHelper\\Proyecto\\Personalizado-nuevo`. Si ya existe `Personalizado-main` con `.venv`, **no lo sobrescribas**.
-2. Conserva `C:\\CitaHelper\\Proyecto\\Personalizado-main\\.venv`, Python 3.13.18, Camoufox y FPGen preparados. Copia los archivos `CompilarPortable.bat`, `LimpiarPortable.bat`, `scripts/compilar_portable.ps1` y `scripts/limpiar_portable.ps1` desde el ZIP nuevo a `C:\\CitaHelper` (los controladores `.ps1` van directamente en la raíz, no dentro de `scripts`).
-3. Ejecuta `CompilarPortable.bat` con doble clic, desde cualquier carpeta. Selecciona la fuente manual descomprimida y la copia a una ruta corta `C:\\CitaHelper\\s\\...`. Usa solo las dependencias ya instaladas, comprueba el modelo FPGen y ejecuta PyInstaller, las pruebas del ejecutable y su empaquetado ZIP con SHA-256.
+2. Conserva `C:\\CitaHelper\\Proyecto\\Personalizado-main\\.venv`, Python 3.13.18, Camoufox y FPGen preparados. **Haz doble clic en `CompilarPortable.bat` dentro de la carpeta del ZIP nuevo**: el propio BAT copiará automáticamente los dos lanzadores y controladores ligeros a la raíz de `C:\\CitaHelper`.
+3. En ocasiones posteriores podrás ejecutar `C:\\CitaHelper\\CompilarPortable.bat` con doble clic, o moverlo al Escritorio. Selecciona la fuente manual descomprimida y la copia a una ruta corta `C:\\CitaHelper\\s\\...`. Usa solo las dependencias ya instaladas, comprueba el modelo FPGen y ejecuta PyInstaller, las pruebas del ejecutable y su empaquetado ZIP con SHA-256.
 4. El portable final es la **carpeta descomprimida**
    `C:\\CitaHelper\\Compilaciones\\Cita Extranjeria Helper - Personalizado`. Al finalizar correctamente se eliminan los archivos ZIP y temporales de ese intento; no se conserva un segundo portable comprimido.
 5. **Abre y prueba manualmente el ejecutable nuevo antes de limpiar más archivos.**
