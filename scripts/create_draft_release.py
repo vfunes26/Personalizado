@@ -18,7 +18,23 @@ def verified_assets(directory, version):
     expected += [f'Cita_Extranjeria_Helper-{version}-x86_64.AppImage',
                  f'Cita_Extranjeria_Helper-{version}-x86_64.AppImage.zsync']
     portable=f'extranjeria-cita-helper-{version}-windows-x64-portable.zip'
-    if (directory/portable).is_file():expected.append(portable)
+    if (directory/portable).is_file():
+        expected.append(portable)
+        manifest = f'portable-manifest-{version}.json'
+        if (directory/manifest).is_file():
+            expected.append(manifest)
+        import re
+        deltas = sorted(directory.glob(portable[:-4] + '-from-*.delta.zip'))
+        for delta in deltas:
+            match = re.fullmatch(
+                re.escape(portable[:-4]) + r'-from-([0-9]+\\.[0-9]+\\.[0-9]+)\\.delta\\.zip',
+                delta.name)
+            if (not match or
+                    tuple(map(int,match.group(1).split('.'))) >=
+                    tuple(map(int,version.split('.'))) or
+                    delta.stat().st_size >= (directory/portable).stat().st_size):
+                raise ValueError('Differential release is invalid or not smaller')
+            expected.append(delta.name)
     sums = []
     archives = []
     for name in expected:
