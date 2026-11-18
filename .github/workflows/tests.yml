@@ -2,6 +2,10 @@ name: Tests
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/validation-milestone.txt'
 
 permissions:
   contents: read
