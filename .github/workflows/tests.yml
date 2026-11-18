@@ -35,6 +35,9 @@ jobs:
           python-version: '3.13'
       - name: Check documentation links and markup
         run: uv run --no-project --with markdown-it-py==4.2.0 python scripts/check_docs.py
+      - name: Check Windows PowerShell syntax without executing cleanup
+        if: steps.scope.outputs.docs_only != 'true'
+        run: pwsh -NoProfile -NonInteractive -File scripts/check_powershell_syntax.ps1
       - name: Install Linux GUI libraries
         if: steps.scope.outputs.docs_only != 'true'
         run: |

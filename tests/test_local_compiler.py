@@ -161,3 +161,26 @@ def test_compiler_checks_offline_lock_before_staging_new_build():
     assert 'tomllib.load(stream)' in guard
     assert 'metadata.version' in guard
     assert 'urlopen' not in guard
+
+
+def test_installed_bundle_integrity_is_checked_before_source_hash_shortcut():
+    ps = (ROOT / 'scripts/compilar_portable.ps1').read_text(encoding='utf-8')
+    assert "function CrearHuellaPortable" in ps
+    assert "function VerificarHuellaPortable" in ps
+    assert "CrearHuellaPortable $candidate" in ps
+    assert "VerificarHuellaPortable $ready" in ps
+    assert "'bundle-esencial.sha256'" in ps
+    assert "scripts\\verify_bundle.py'), $ready" in ps
+    assert ps.index("VerificarHuellaPortable $ready") < ps.index(
+        "Esta fuente ya esta compilada. No se repite el trabajo.")
+
+
+def test_powershell_parser_in_ci_and_cleanup_regex_not_truncated():
+    cleanup = (ROOT / 'scripts/limpiar_portable.ps1').read_text(encoding='utf-8')
+    assert "Where-Object { $_.Name -match '^Personalizado-[0-9]{8}-[0-9]{6}-[a-f0-9]{8}$' })) {" in cleanup
+    assert cleanup.count("} catch {") == 1
+    assert cleanup.rstrip().endswith("    exit 1\\n}".replace("\\n", "\n"))
+    action = (ROOT / '.github/workflows/tests.yml').read_text(encoding='utf-8')
+    assert 'pwsh -NoProfile -NonInteractive -File scripts/check_powershell_syntax.ps1' in action
+    parser = (ROOT / 'scripts/check_powershell_syntax.ps1').read_text(encoding='utf-8')
+    assert '[System.Management.Automation.Language.Parser]::ParseFile' in parser

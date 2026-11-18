@@ -1,10 +1,27 @@
 import pytest
 
-from app.desktop.proxy_profiles import ProxyProfileError, ProxyProfileStore
+from app.desktop.proxy_profiles import ProxyCredentialVault, ProxyProfileError, ProxyProfileStore
+
+
+class MemoryBackend:
+    def __init__(self):
+        self.items = {}
+        self.fail_save = False
+
+    def set_password(self, service, key, value):
+        if self.fail_save:
+            raise RuntimeError("vault unavailable")
+        self.items[(service, key)] = value
+
+    def get_password(self, service, key):
+        return self.items.get((service, key))
+
+    def delete_password(self, service, key):
+        self.items.pop((service, key), None)
 
 
 def test_proxy_is_fixed_per_request_profile(tmp_path):
-    store=ProxyProfileStore(tmp_path/'data'/'proxy-profiles.json')
+    store=ProxyProfileStore(tmp_path/'data'/'proxy-profiles.json', vault=ProxyCredentialVault(backend=MemoryBackend()))
 
     first=store.save_proxy_profile(None,{
         'label':'Proxy principal',
