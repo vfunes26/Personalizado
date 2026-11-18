@@ -146,3 +146,21 @@ def test_copy_preserves_complete_structured_report():
     report = {'parts':[{'detail':'technical detail ' * 500} for _ in range(5)]}
     text = report_clipboard_text('20261019T123456-1234abcd', report)
     assert json.loads(text.split('\n', 1)[1]) == report
+
+
+
+@pytest.mark.parametrize("stderr, expected", [
+    ("RuntimeError: nombre y documento privados", "RuntimeError"),
+    ("playwright._impl._errors.TargetClosedError: unknown user", "TargetClosedError"),
+    ("SEC_ERROR_UNKNOWN_ISSUER: secret", "CertificateError"),
+    ("BrowserType.launch: Executable doesn't exist at private location", "BrowserLaunchError"),
+    ("PrivateNameError: NIE 123456789", "WorkerExit"),
+])
+def test_worker_exit_category_is_safe(stderr, expected):
+    from app.desktop.startup_report import worker_exit_summary
+    summary = worker_exit_summary(1, stderr)
+    assert expected in summary
+    assert "123456789" not in summary
+    assert "secret" not in summary
+    assert "private location" not in summary
+    assert "documento privados" not in summary
