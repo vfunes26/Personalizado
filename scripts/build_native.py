@@ -18,10 +18,12 @@ def build_native(*, output_directory=None):
     from PySide6.QtSvg import QSvgRenderer
     from camoufox.pkgman import camoufox_path
     from camoufox.addons import add_default_addons
-    from camoufox.fpgen_model import ensure_fpgen_model, fpgen_data_dir, PIN, STAMP, PINNED_MTIME
+    from camoufox.fpgen_model import fpgen_data_dir, PIN, STAMP, PINNED_MTIME
     from app.version import VERSION, native_version
+    import hashlib
 
-    browser = Path(camoufox_path())
+    # Local Windows builds must never invoke Camoufox's 1.4 GB downloader.
+    browser = Path(camoufox_path(download_if_missing=False))
     executable = 'camoufox.exe' if sys.platform == 'win32' else 'camoufox-bin'
     if not (browser / executable).is_file():
         raise SystemExit('Fetch Camoufox before building.')
@@ -29,7 +31,16 @@ def build_native(*, output_directory=None):
     work = ROOT / 'data' / 'build-native'
     source = ROOT / 'app' / 'desktop' / 'assets'
     model = fpgen_data_dir()
-    ensure_fpgen_model(model)
+    for filename, expected_hash in PIN['file_sha256'].items():
+        item = model / filename
+        if not item.is_file():
+            raise SystemExit(f'FPGen incompleto: falta {filename}. No se descargará.')
+        with item.open('rb') as stream:
+            actual_hash = hashlib.file_digest(stream, 'sha256').hexdigest()
+        if actual_hash != expected_hash:
+            raise SystemExit(f'FPGen incompatible: {filename}. No se descargará.')
+    if not (model / STAMP).is_file():
+        raise SystemExit('FPGen incompleto: falta el marcador del modelo. No se descargará.')
     model_names = [*PIN['file_sha256'], STAMP]
     model_args = []
     for name in model_names:
