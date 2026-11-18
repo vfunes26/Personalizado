@@ -82,14 +82,23 @@ def build(new_zip, version, *, previous=None, find_previous=False):
         digest + '  ' + manifest_path.name + '\n', encoding='utf-8')
     print('Manifiesto:', manifest_path)
     if find_previous:
-        previous = previous_release_manifest(version)
+        try:
+            previous = previous_release_manifest(version)
+        except (OSError, ValueError):
+            # Connectivity issues fetching a tiny optional old manifest
+            # cannot block publication of the signed full ZIP.
+            previous = None
     if previous is None:
-        print('Sin versión base publicada: se conserva la actualización completa.')
+        print('Sin manifiesto anterior disponible: se conserva la actualización completa.')
         return manifest_path, None
     from_version, old_files = previous
     name = delta_asset_name(new_zip.name, from_version)
     output = new_zip.parent / name
-    create_delta(new_zip, old_files, from_version, version, output)
+    try:
+        create_delta(new_zip, old_files, from_version, version, output)
+    except DeltaError:
+        print('Diferencial no disponible: se conserva la actualización completa.')
+        return manifest_path, None
     if output.stat().st_size >= new_zip.stat().st_size:
         output.unlink()
         print('El diferencial no ahorra datos: se conserva el paquete completo.')
