@@ -17,7 +17,7 @@ def test_launcher_can_run_from_any_directory_and_finds_citahelper_root():
     assert '"/limpiar"' in launcher
     assert 'Compilando codigo descomprimido manualmente' in launcher
     assert 'powershell.exe -NoLogo -NoProfile' in launcher
-    assert 'if not defined CONTROL' in launcher
+    assert 'if not exist "%CONTROL%"' in launcher
     assert 'rmdir /s' not in launcher.lower()
     assert 'del /f' not in launcher.lower()
 
