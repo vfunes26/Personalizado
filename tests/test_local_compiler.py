@@ -204,3 +204,9 @@ def test_protected_cleanup_previews_before_password_and_only_deletes_approved_pa
     assert 'bundle-esencial.sha256' in cleanup
     assert "'Personalizado-final') { continue }" in cleanup
     assert 'VaciarFuenteManual $root' in cleanup
+
+def test_cleanup_preview_does_not_claim_to_have_emptied_the_source():
+    ps = (ROOT / 'scripts/limpiar_portable.ps1').read_text(encoding='utf-8')
+    assert "if ($script:VistaPrevia) {\n        Avisar ('[VISTA PREVIA] Personalizado-final quedaria VACIA" in ps
+    assert "Avisar ('Personalizado-final VACIA y conservada: ' + $folder)" in ps
+    assert ps.index("if ($script:VistaPrevia) {\n        Avisar ('[VISTA PREVIA] Personalizado-final") < ps.index("function EjecutarLimpieza")

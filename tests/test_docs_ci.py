@@ -189,3 +189,34 @@ def test_scope_main_runs_full_checks_when_git_comparison_fails(repository, monke
     assert output.read_text() == 'docs_only=false\n'
     assert 'run normal checks' in summary.read_text()
     assert 'Git comparison failed' in capsys.readouterr().out
+
+
+def test_tests_ci_executes_on_relevant_main_changes_and_pull_requests():
+    import yaml
+    workflow = yaml.safe_load((Path(__file__).parents[1] / '.github/workflows/tests.yml').read_text(encoding='utf-8'))
+    # PyYAML may parse the YAML 1.1 'on' key as True.
+    triggers = workflow.get('on', workflow.get(True))
+    assert set(triggers) == {'workflow_dispatch', 'push', 'pull_request'}
+    assert triggers['push']['branches'] == ['main']
+    assert triggers['pull_request']['branches'] == ['main']
+    expected = {
+        'app/**', 'scripts/**', 'tests/**', 'catalogs/**',
+        '.github/workflows/**', '.github/release-version',
+        '.github/validation-milestone.txt', 'pyproject.toml', 'uv.lock',
+        'CompilarPortable.bat', 'LimpiarPortable.bat',
+        'README*.md', 'CHANGELOG.md', 'LICENSE', 'docs/**',
+    }
+    assert set(triggers['push']['paths']) == expected
+    assert set(triggers['pull_request']['paths']) == expected
+    # CI must not automatically compile Windows: that workflow is manual.
+    windows = yaml.safe_load((Path(__file__).parents[1] / '.github/workflows/build-windows-portable.yml').read_text(encoding='utf-8'))
+    windows_events = windows.get('on', windows.get(True))
+    assert set(windows_events) == {'workflow_dispatch'}
+
+
+def test_ci_keeps_documentation_only_path_optimization():
+    workflow_text = (Path(__file__).parents[1] / '.github/workflows/tests.yml').read_text(encoding='utf-8')
+    assert 'python3 scripts/ci_scope.py' in workflow_text
+    assert "steps.scope.outputs.docs_only != 'true'" in workflow_text
+    assert "steps.scope.outputs.docs_only == 'true'" in workflow_text
+    assert "pwsh -NoProfile -NonInteractive -File scripts/check_powershell_syntax.ps1" in workflow_text

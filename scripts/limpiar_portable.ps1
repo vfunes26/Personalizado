@@ -139,7 +139,11 @@ function VaciarFuenteManual([string]$root) {
         return
     }
     foreach ($item in $contenido) { EliminarSeguro $item.FullName $root }
-    Avisar ('Personalizado-final VACIA y conservada: ' + $folder)
+    if ($script:VistaPrevia) {
+        Avisar ('[VISTA PREVIA] Personalizado-final quedaria VACIA y conservada: ' + $folder)
+    } else {
+        Avisar ('Personalizado-final VACIA y conservada: ' + $folder)
+    }
 }
 
 function EjecutarLimpieza([string]$root, [string]$portable) {

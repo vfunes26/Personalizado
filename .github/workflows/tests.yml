@@ -1,11 +1,45 @@
 name: Tests
 
+# Comprobaciones automáticas de cambios relevantes; documentación sola es ligera.
+# Mantener la compilación Windows personal como flujo EXCLUSIVAMENTE manual.
 on:
   workflow_dispatch:
   push:
     branches: [main]
     paths:
+      - 'app/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'catalogs/**'
+      - '.github/workflows/**'
+      - '.github/release-version'
       - '.github/validation-milestone.txt'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - 'CompilarPortable.bat'
+      - 'LimpiarPortable.bat'
+      - 'README*.md'
+      - 'CHANGELOG.md'
+      - 'LICENSE'
+      - 'docs/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'app/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'catalogs/**'
+      - '.github/workflows/**'
+      - '.github/release-version'
+      - '.github/validation-milestone.txt'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - 'CompilarPortable.bat'
+      - 'LimpiarPortable.bat'
+      - 'README*.md'
+      - 'CHANGELOG.md'
+      - 'LICENSE'
+      - 'docs/**'
 
 permissions:
   contents: read
