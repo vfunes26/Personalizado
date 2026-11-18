@@ -4,7 +4,6 @@ Only a matching .part and its identity sidecar may be resumed. A partial file
 is never installable. Callers must still verify SHA-256 and Sigstore provenance.
 """
 from contextlib import closing
-import errno
 import hashlib
 import http.client
 import json
@@ -193,7 +192,18 @@ def fetch_package(release, directory, checksum, cancel, *, fetch, progress=lambd
             return part
         try:
             reached_end = _download_once(release, part, meta, record, cancel, fetch, progress)
-            if reached_end and part.stat().st_size < release.size:
+            if part.stat().st_size == release.size:
+                with part.open('rb') as stream:
+                    actual = hashlib.file_digest(stream, 'sha256').hexdigest()
+                if actual == checksum:
+                    progress(100)
+                    return part
+                _remove(part, meta)
+                if attempt == MAX_ATTEMPTS - 1:
+                    raise ValueError('Downloaded package checksum mismatch')
+                record = dict(expected)
+                continue
+            if reached_end:
                 # Some servers choose a shorter 206 range; request the remainder.
                 continue
         except HTTPError as exc:
