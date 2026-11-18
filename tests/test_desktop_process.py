@@ -22,7 +22,12 @@ def test_real_process_partial_json_and_graceful_stop(tmp_path,catalog_path,qt_ap
     while not states and time.monotonic()<deadline: QTest.qWait(25)
     assert states[-1]['screen']=='test'
     controller.last_message=time.monotonic()-5;controller.check_heartbeat()
+    assert not states[-1].get('connection_lost')
+    controller.last_message=time.monotonic()-16;controller.check_heartbeat()
     assert states[-1]['connection_lost']
+    observed = len(states)
+    controller.check_heartbeat()
+    assert len(states) == observed  # Repeated timer ticks do not spam alerts.
     controller.shutdown()
     while not done and time.monotonic()<deadline: QTest.qWait(25)
     assert done==[0] and not controller.active
@@ -93,3 +98,23 @@ def test_worker_crash_stderr_is_reported_once(tmp_path, catalog_path, qt_app, mo
     assert checks == [False]
     assert 'ImportError' in report['message']
     assert 'browser component missing' not in report['message']
+
+def test_slow_startup_uses_longer_heartbeat_grace(tmp_path, catalog_path, qt_app):
+    controller = DesktopController(ProfileStore(tmp_path/'tasks.yml', catalog_path))
+    states = []
+    controller.state_changed.connect(states.append)
+    controller.process.start(sys.executable, ['-c', 'import time;time.sleep(2)'])
+    assert controller.process.waitForStarted(2000)
+    try:
+        controller.last_message = time.monotonic() - 30
+        controller.check_heartbeat()
+        assert not states
+        controller.last_message = time.monotonic() - 61
+        controller.check_heartbeat()
+        assert states and states[-1]['connection_lost']
+        count = len(states)
+        controller.check_heartbeat()
+        assert len(states) == count
+    finally:
+        controller.process.kill()
+        controller.process.waitForFinished(2000)
