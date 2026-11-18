@@ -89,12 +89,35 @@ def report_clipboard_text(report_id, report):
             + json.dumps(scrub(report), ensure_ascii=False, indent=2))
 
 
+# Technical types only: stderr can contain user input or unredacted paths.
+WORKER_ERROR_TYPES = frozenset({
+    'RuntimeError', 'ImportError', 'ModuleNotFoundError', 'OSError',
+    'FileNotFoundError', 'PermissionError', 'TimeoutError', 'ConnectionError',
+    'SSLError', 'TargetClosedError', 'BrowserTypeError', 'ValueError',
+    'TypeError', 'AssertionError', 'BrokenPipeError', 'MemoryError',
+    'ProcessLookupError', 'NotImplementedError', 'KeyError',
+})
+
+
 def worker_exit_summary(code, stderr):
-    """Extract only recognized technical identifiers, never arbitrary stderr text."""
-    kinds = re.findall(r"(?m)^([A-Za-z_][A-Za-z0-9_]*(?:Error|Exception)):", stderr)
-    kind = kinds[-1] if kinds else 'WorkerExit'
-    summary = f'Worker exit {code}: {kind}'
-    missing = re.search(r"ModuleNotFoundError: No module named ['\"]([A-Za-z_][A-Za-z0-9_.]*)['\"]", stderr)
+    """Summarize a crashed worker without copying sensitive stderr."""
+    # Never include exception messages: they may contain NIE, passwords,
+    # contact details, page content, or authenticated proxy URLs.
+    kinds = re.findall(
+        r"(?m)^(?:[A-Za-z_][A-Za-z0-9_.]*[.])?([A-Za-z_][A-Za-z0-9_]*(?:Error|Exception)):",
+        stderr,
+    )
+    kind = next((item for item in reversed(kinds) if item in WORKER_ERROR_TYPES), 'WorkerExit')
+    if kind == 'WorkerExit':
+        if re.search(r'SEC_ERROR_UNKNOWN_ISSUER|CERTIFICATE_VERIFY_FAILED|certificate verify failed', stderr, re.I):
+            kind = 'CertificateError'
+        elif re.search(r"Executable doesn't exist|Failed to launch browser|browser executable was not found", stderr, re.I):
+            kind = 'BrowserLaunchError'
+    summary = f'Worker exit {int(code)}: {kind}'
+    missing = re.search(
+        r"ModuleNotFoundError: No module named ['\\"]([A-Za-z_][A-Za-z0-9_.]*)['\\"]",
+        stderr,
+    )
     if missing:
         summary += ' — missing module: ' + missing.group(1)
     return summary
