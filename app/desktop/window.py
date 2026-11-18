@@ -1489,6 +1489,17 @@ class DesktopWindow(QMainWindow):
             return
         self.sync_telegram_inbox()
 
+    def _refresh_busy_profile_snapshot(self):
+        """Read Qt state on the GUI thread; Telegram sees an immutable snapshot."""
+        busy = set()
+        if self.controller.active and self.controller.profile_id:
+            busy.add(self.controller.profile_id)
+        panel = getattr(self, 'workers_panel', None)
+        if panel is not None:
+            busy.update(slot.profile_id for slot in panel.pool.slots.values()
+                        if slot.active and slot.profile_id)
+        self._telegram_busy_profiles = frozenset(busy)
+
     def sync_telegram_inbox(self):
         wanted=False
         try: wanted=self.store.telegram_inbox_enabled()
@@ -1497,7 +1508,21 @@ class DesktopWindow(QMainWindow):
         if wanted and thread is None:
             from ..telegram_inbox import InboxThread, TelegramInbox
             from .notification_store import NotificationVault
-            self.inbox_thread=InboxThread(TelegramInbox(self.store,NotificationVault()))
+            if not hasattr(self, '_telegram_busy_timer'):
+                self._telegram_busy_timer = QTimer(self)
+                self._telegram_busy_timer.setInterval(250)
+                self._telegram_busy_timer.timeout.connect(self._refresh_busy_profile_snapshot)
+                self._telegram_busy_timer.start()
+            self._refresh_busy_profile_snapshot()
+            from .profile_deletion import ProfileDeletionService
+            vault = NotificationVault()
+            service = ProfileDeletionService(
+                self.store, vault=vault,
+                busy_checker=lambda profile_id: profile_id in self._telegram_busy_profiles,
+            )
+            self.inbox_thread=InboxThread(
+                TelegramInbox(self.store, vault, deletion_service=service),
+            )
             self.inbox_thread.start()
         elif not wanted and thread is not None:
             thread.stop(); self.inbox_thread=None
