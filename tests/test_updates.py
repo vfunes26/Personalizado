@@ -218,7 +218,7 @@ def test_portable_update_selects_optional_verified_delta_asset():
     assert result.delta.name == patch
     assert result.delta.size < result.size
     assert result.delta.url.startswith('https://github.com/vfunes26/Personalizado/')
-    assert select_release(data,'0.1.0','windows','x64').delta is None
+    assert select_release(release('0.2.0'),'0.1.0','windows','x64').delta is None
     # Missing signature -> do not choose a delta.
     data['assets'].pop()
     assert select_release(data,'0.1.0','windows','x64',portable=True).delta is None
