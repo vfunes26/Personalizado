@@ -1,8 +1,10 @@
 """GUI-side state routing. Delivery never drives or inspects the browser."""
 import copy
+from pathlib import Path
 from PySide6.QtCore import QObject, Signal
 from .notification_jobs import NotificationJobs
 from .notification_store import NotificationVault
+from .telegram_global import TelegramGlobalStore, TelegramGlobalError
 from ..notifications import settings,EventRouter,make_event,Telegram,webhook_request,send_request,state_event,NotificationError,telegram_message,profile_data_text
 
 
@@ -12,7 +14,7 @@ class NotificationDelivery(QObject):
     def __init__(self,store,parent=None):
         super().__init__(parent);self.store=store;self.jobs=NotificationJobs(self);self.vault=NotificationVault()
         self.router=EventRouter();self.telegram_router=EventRouter();self.profile_id=None;self.generation=0;self.current_visit=None;self.closed=False
-        self.prepared_profile=None;self.secrets={}
+        self.prepared_profile=None;self.secrets={};self.global_telegram=None
 
     def prepare(self, profile_id):
         """Resolve native vault access before the browser starts searching."""
@@ -26,9 +28,20 @@ class NotificationDelivery(QObject):
             self.result.emit('profile', 'Не удалось прочитать выбранный профиль. Выберите профиль заново и повторите запуск.')
             return False
         config = settings(raw.get('notifications', {}))
+        self.global_telegram = None
+        if hasattr(self.store, 'path'):
+            try:
+                self.global_telegram = TelegramGlobalStore(
+                    Path(self.store.path).parent, vault=self.vault).credentials()
+            except TelegramGlobalError as exc:
+                self.result.emit('telegram', str(exc))
+                ready = False
         for channel in ('telegram', 'webhook'):
             connection = config[channel]
             if not connection['enabled'] or not connection.get('events'):
+                continue
+            if channel == 'telegram' and self.global_telegram:
+                # Global bot uses its own native secret instead of a per-profile token.
                 continue
             reference = connection.get('secret_ref', '')
             if reference in previous:
@@ -67,11 +80,33 @@ class NotificationDelivery(QObject):
         message=telegram_message(payload,language,state.get('booking_details'),offices=state.get('available_offices'),preferred=raw.get('request',{}).get('office',''))
         message=profile_data_text(raw)+message
         for channel in ('telegram','webhook'):
-            if not (telegram_event if channel=='telegram' else event):continue
-            connection=copy.deepcopy(config[channel])
-            if not connection['enabled'] or (telegram_event if channel=='telegram' else event) not in connection.get('events',[]):continue
-            secret = (copy.deepcopy(self.secrets.get(connection.get('secret_ref', '')))
-                      if self.prepared_profile == profile_id else None)
+            event_name = telegram_event if channel == 'telegram' else event
+            if not event_name:
+                continue
+            connection = copy.deepcopy(config[channel])
+            admin = (self.global_telegram if self.prepared_profile == profile_id
+                     and channel == 'telegram' else None)
+            if channel == 'telegram':
+                recipients = []
+                if admin:
+                    recipients.append({'id': admin['owner_chat_id']})
+                if connection['enabled'] and event_name in connection.get('events', []):
+                    for recipient in connection.get('recipients', []):
+                        allowed_events = recipient.get('events', connection.get('events', []))
+                        if event_name in allowed_events:
+                            recipients.append(recipient)
+                recipients_by_id = {str(r['id']): r for r in recipients if r.get('id')}
+                if not recipients_by_id:
+                    continue
+                connection['recipients'] = list(recipients_by_id.values())
+                secret = ({'token': admin['token']} if admin else
+                          copy.deepcopy(self.secrets.get(connection.get('secret_ref', '')))
+                          if self.prepared_profile == profile_id else None)
+            else:
+                if not connection['enabled'] or event_name not in connection.get('events', []):
+                    continue
+                secret = (copy.deepcopy(self.secrets.get(connection.get('secret_ref', '')))
+                          if self.prepared_profile == profile_id else None)
             def deliver(channel=channel,connection=connection,secret=secret):
                 if not current():raise NotificationError('Уведомление устарело')
                 if secret is None:raise NotificationError('Секреты уведомлений не подготовлены. Проверить настройки до запуска поиска.')
@@ -100,6 +135,6 @@ class NotificationDelivery(QObject):
         self.router = EventRouter(); self.router.sent.update(webhook_sent)
         self.telegram_router = EventRouter(); self.telegram_router.sent.update(telegram_sent)
         self.current_visit = None
-        self.secrets = {}; self.prepared_profile = None
+        self.secrets = {}; self.prepared_profile = None; self.global_telegram = None
 
     def stop(self):self.closed=True;self.reset()
