@@ -663,6 +663,10 @@ class DesktopWindow(QMainWindow):
                                'Los tokens del almacén de Windows no se transfieren.',muted=True))
         layout.addWidget(label('Обновления',name='sectionHeading'))
         self.updates_toggle=self.toggle_row(layout,'Автоматически проверять обновления','Проверять GitHub Releases при запуске и раз в сутки. Скачивание и установка — по кнопке.',key='updates')
+        layout.addWidget(label('Gmail — correo SMTP seguro',name='sectionHeading'))
+        from .gmail_panel import GmailPanel
+        self.gmail_panel=GmailPanel(self.store.path.parent/'data'/'gmail-settings.json',self)
+        layout.addWidget(self.gmail_panel)
         layout.addWidget(label('Telegram',name='sectionHeading'))
         self.telegram_toggle=self.toggle_row(layout,'Создавать профили из Telegram','Бот принимает шаблон от подключённых получателей и создаёт профиль. Работает, пока приложение открыто.',key='telegram_profiles')
         self.telegram_status=label('',muted=True); self.telegram_status.setWordWrap(True); self.telegram_status.setVisible(False); layout.addWidget(self.telegram_status)
