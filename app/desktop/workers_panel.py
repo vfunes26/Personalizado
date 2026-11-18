@@ -309,7 +309,7 @@ class WorkersPanel(QWidget):
         row['show'].setEnabled(controller_active)
         row['stop'].setEnabled(running)
         if slot.manual:
-            self.main_window.statusBar().showMessage(f'Trabajador {index + 1}: requiere intervencion (CAPTCHA).', 7000)
+            self.main_window.statusBar().showMessage(f'Trabajador {index + 1}: requiere intervención manual. Consulta Estado.', 7000)
             QApplication.alert(self.main_window, 0)
         self.update_global()
 
