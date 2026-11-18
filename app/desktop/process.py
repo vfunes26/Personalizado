@@ -8,6 +8,10 @@ from .protocol import JsonLinesDecoder, encode_message
 from .paths import runtime_root, worker_arguments, worker_executable
 
 
+STARTUP_HEARTBEAT_TIMEOUT = 60
+ACTIVE_HEARTBEAT_TIMEOUT = 15
+
+
 class DesktopController(QObject):
     state_changed = Signal(dict)
     failed = Signal(str)
@@ -28,6 +32,8 @@ class DesktopController(QObject):
         self.decoder = JsonLinesDecoder(limit=2 * 1024 * 1024)
         self.last_state = {}
         self.last_message = 0
+        self.worker_contacted = False
+        self.heartbeat_reported = False
         self.stopping = False
         self.closing_session = False
         self.timer = QTimer(self)
@@ -60,6 +66,8 @@ class DesktopController(QObject):
         self.closing_session = False
         self.last_state = dict(screen='Запуск Camoufox', evidence='', next_action='Открыть сайт', mode='working')
         self.last_message = time.monotonic()
+        self.worker_contacted = False
+        self.heartbeat_reported = False
         self.process.start(str(worker_executable()), worker_arguments(profile_id))
         self.timer.start()
         self.state_changed.emit(self.last_state)
@@ -76,6 +84,8 @@ class DesktopController(QObject):
         for message in self.decoder.feed(bytes(self.process.readAllStandardOutput())):
             if message.get('type') in {'ready', 'state'}:
                 self.last_message = time.monotonic()
+                self.worker_contacted = True
+                self.heartbeat_reported = False
             if message.get('type') == 'state' and isinstance(message.get('state'), dict):
                 self.last_state = message['state']
                 if self.last_state.get('browser_retained') and not self.closing_session:
@@ -89,7 +99,12 @@ class DesktopController(QObject):
                 self.failed.emit('Не удалось прочитать сообщение бота — ждём следующее обновление.')
 
     def check_heartbeat(self):
-        if self.active and time.monotonic() - self.last_message > 3:
+        # Launching the browser may take longer than routine worker IPC.
+        # Report a silent worker once per interruption, not every second.
+        timeout = ACTIVE_HEARTBEAT_TIMEOUT if self.worker_contacted else STARTUP_HEARTBEAT_TIMEOUT
+        if (self.active and not self.heartbeat_reported
+                and time.monotonic() - self.last_message > timeout):
+            self.heartbeat_reported = True
             self.state_changed.emit(dict(self.last_state, connection_lost=True))
 
     def shutdown(self, *, close_browser=False):
