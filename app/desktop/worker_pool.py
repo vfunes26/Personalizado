@@ -44,6 +44,7 @@ def worker_status_from_state(state):
     tone = ('success' if mode == 'booking_handoff'
             else 'attention' if mode == 'manual'
             else 'accent' if mode in {'working', 'waiting'}
+            else 'danger' if mode == 'recovery'
             else 'muted')
     return text, tone
 
@@ -99,7 +100,8 @@ class WorkerSlot(QObject):
         text, tone = worker_status_from_state(state)
         was_manual = self.manual
         # Record only category transitions and never any raw server response.
-        exceptional = text if tone in {'danger', 'attention'} and text != MODE_TEXT.get(mode) else None
+        exceptional = (text if (tone in {'danger', 'attention'} and text != MODE_TEXT.get(mode))
+                       or mode == 'paused' else None)
         if exceptional != self._last_status_reason:
             self._last_status_reason = exceptional
             if exceptional:
