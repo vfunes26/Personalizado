@@ -155,6 +155,27 @@ class ProfileStore:
         self._write(raw, revision)
         return profile_id
 
+    def delete_profile(self, profile_id, *, revision):
+        """Remove a profile only from the revision the operator confirmed.
+
+        The existing atomic writer prevents losing edits from Telegram or GUI.
+        Returns a deep copy for an authorized, optional e-mail receipt.
+        """
+        if not profile_id:
+            raise ProfileValidationError('Selecciona un perfil para eliminar.')
+        raw = self._read()
+        tasks = raw.get('tasks', [])
+        target = next((task for task in tasks if task.get('id') == profile_id), None)
+        if target is None:
+            raise ProfileConflictError('El perfil ya no existe. Actualiza la lista.')
+        raw['tasks'] = [task for task in tasks if task.get('id') != profile_id]
+        desktop = raw.get('desktop') or {}
+        if desktop.get('last_profile_id') == profile_id:
+            desktop.pop('last_profile_id', None)
+            raw['desktop'] = desktop
+        self._write(raw, revision)
+        return copy.deepcopy(target)
+
     def last_profile(self):
         value=(self._read().get('desktop') or {}).get('last_profile_id')
         return value if isinstance(value,str) else None
