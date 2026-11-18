@@ -27,6 +27,7 @@ FILES = frozenset({
     'data/proxy-profiles.json',
     'data/workers-config.json',
     'data/gmail-settings.json',
+    'data/telegram-global.json',
     'data/state.db',
     'data/profile-statistics.sqlite3',
     'data/profile-statistics.json',
@@ -245,6 +246,21 @@ def restore_backup(root, source, password, *, allow_replace=False):
             ).encode('utf-8')
         except (ValueError, TypeError):
             raise BackupError('Configuración de Gmail del respaldo inválida.') from None
+    if 'data/telegram-global.json' in records:
+        # OS vault entries cannot travel with encrypted backups across accounts.
+        # Preserve the administrator and authorized IDs but require a token
+        # to be entered again before the global bot can be used.
+        try:
+            global_telegram = json.loads(records['data/telegram-global.json'])
+            if not isinstance(global_telegram, dict):
+                raise ValueError()
+            global_telegram['secret_ref'] = ''
+            global_telegram['enabled'] = False
+            records['data/telegram-global.json'] = json.dumps(
+                global_telegram, ensure_ascii=False, indent=2,
+            ).encode('utf-8')
+        except (ValueError, TypeError):
+            raise BackupError('Configuración global de Telegram inválida.') from None
     targets = {name: root / name for name in records}
     for path in targets.values():
         if path.is_symlink() or any(parent.is_symlink() for parent in path.parents):
