@@ -98,3 +98,124 @@ def test_global_admin_receives_event_without_per_profile_telegram_enabled(qt_app
         assert delivered == ['11111111']
     finally:
         delivery.stop()
+
+
+
+def test_global_bot_filters_unapproved_private_recipients(qt_app, monkeypatch, tmp_path):
+    vault = Vault()
+    TelegramGlobalStore(tmp_path, vault=vault).save(
+        '11111111', ['22222222'], token='123456:ABCDEF')
+
+    class Store:
+        path = tmp_path / 'tasks.yml'
+
+        def raw_profile(self, profile):
+            return {'notifications': {'telegram': {
+                'enabled': True, 'events': ['booking'], 'secret_ref': 'unused',
+                'recipients': [
+                    {'id': '22222222', 'type': 'private'},
+                    {'id': '33333333', 'type': 'private'},
+                    {'id': '-44444444', 'type': 'group'},
+                ],
+            }}}
+
+    sent = []
+
+    class Client:
+        def __init__(self, token):
+            assert token == '123456:ABCDEF'
+
+        def send(self, chat, message, current):
+            sent.append(chat)
+
+    monkeypatch.setattr(delivery_module, 'Telegram', Client)
+    delivery = NotificationDelivery(Store())
+    delivery.vault = vault
+    delivery.jobs.submit = lambda work, done: done(True, work())
+    try:
+        assert delivery.prepare('one')
+        delivery.observe('one', {'booking_handoff': True, 'mode': 'manual',
+                                 'run_id': 'run'}, 'es')
+        assert sent == ['11111111', '22222222']
+    finally:
+        delivery.stop()
+
+
+def test_global_bot_revocation_applies_to_pending_delivery(qt_app, monkeypatch, tmp_path):
+    vault = Vault()
+    global_store = TelegramGlobalStore(tmp_path, vault=vault)
+    global_store.save('11111111', ['22222222'], token='123456:ABCDEF')
+
+    class Store:
+        path = tmp_path / 'tasks.yml'
+
+        def raw_profile(self, profile):
+            return {'notifications': {'telegram': {
+                'enabled': True, 'events': ['booking'],
+                'recipients': [{'id': '22222222', 'type': 'private'}],
+            }}}
+
+    sent = []
+
+    class Client:
+        def __init__(self, token):
+            pass
+
+        def send(self, chat, message, current):
+            sent.append(chat)
+
+    monkeypatch.setattr(delivery_module, 'Telegram', Client)
+    delivery = NotificationDelivery(Store())
+    delivery.vault = vault
+    pending = []
+    delivery.jobs.submit = lambda work, done: pending.append(work)
+    try:
+        assert delivery.prepare('one')
+        delivery.observe('one', {'booking_handoff': True, 'mode': 'manual',
+                                 'run_id': 'run'}, 'es')
+        assert len(pending) == 1
+        global_store.save('11111111', [], token='')
+        pending[0]()
+        assert sent == ['11111111']
+    finally:
+        delivery.stop()
+
+
+def test_global_bot_rotation_cancels_pending_delivery(qt_app, monkeypatch, tmp_path):
+    import pytest
+    from app.notifications import NotificationError
+
+    vault = Vault()
+    global_store = TelegramGlobalStore(tmp_path, vault=vault)
+    global_store.save('11111111', [], token='123456:ABCDEF')
+
+    class Store:
+        path = tmp_path / 'tasks.yml'
+
+        def raw_profile(self, profile):
+            return {'notifications': {}}
+
+    sent = []
+
+    class Client:
+        def __init__(self, token):
+            pass
+
+        def send(self, chat, message, current):
+            sent.append(chat)
+
+    monkeypatch.setattr(delivery_module, 'Telegram', Client)
+    delivery = NotificationDelivery(Store())
+    delivery.vault = vault
+    pending = []
+    delivery.jobs.submit = lambda work, done: pending.append(work)
+    try:
+        assert delivery.prepare('one')
+        delivery.observe('one', {'booking_handoff': True, 'mode': 'manual',
+                                 'run_id': 'run'}, 'es')
+        global_store.save('11111111', [], token='999999:NEW_TOKEN')
+        with pytest.raises(NotificationError, match='configuración global'):
+            pending[0]()
+        assert not sent
+    finally:
+        delivery.stop()

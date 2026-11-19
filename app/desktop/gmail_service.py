@@ -9,6 +9,7 @@ import ssl
 import tempfile
 
 from .notification_store import NotificationVault
+from ..locking import ensure_private_path
 from ..notifications import NotificationError
 
 SMTP_HOST = 'smtp.gmail.com'
@@ -48,7 +49,14 @@ class GmailSettings:
         self.vault = vault if vault is not None else NotificationVault()
         self.smtp_factory = smtp_factory or smtplib.SMTP_SSL
 
+    def _guard_path(self):
+        try:
+            ensure_private_path(self.path)
+        except OSError:
+            raise GmailError('La ruta de configuración de Gmail no está permitida.') from None
+
     def read(self):
+        self._guard_path()
         if not self.path.exists():
             return {'sender': '', 'recipients': [], 'secret_ref': ''}
         try:
@@ -68,6 +76,7 @@ class GmailSettings:
         """Save metadata atomically; replace keychain secret only when supplied."""
         sender = _address(sender)
         addresses = list(parse_recipients(recipients))
+        self._guard_path()
         old = self.read()
         change_sender = bool(old['sender'] and old['sender'] != sender)
         if change_sender and not app_password:
@@ -88,8 +97,7 @@ class GmailSettings:
         temp = None
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
-            if self.path.is_symlink() or any(p.is_symlink() for p in self.path.parents):
-                raise GmailError('La ruta de configuración no está permitida.')
+            self._guard_path()
             fd, temp = tempfile.mkstemp(prefix='.gmail-settings-', dir=self.path.parent)
             with os.fdopen(fd, 'w', encoding='utf-8') as stream:
                 json.dump(data, stream, ensure_ascii=False, indent=2)

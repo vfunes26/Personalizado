@@ -936,8 +936,8 @@ class DesktopWindow(QMainWindow):
         choice = QMessageBox.question(
             self, 'Confirmar eliminación',
             f'¿Eliminar el perfil «{task.label}»?\n\n'
-            'Se eliminará de la lista y se enviará un comprobante por Gmail. '
-            'La eliminación quedará registrada en la auditoría local.',
+            'Se eliminará de la lista. Se intentará enviar un comprobante por Gmail '
+            'si está configurado. La eliminación quedará registrada en la auditoría local.',
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
@@ -969,7 +969,7 @@ class DesktopWindow(QMainWindow):
         if result['emailed']:
             message = 'Perfil eliminado y comprobante Gmail enviado.'
         else:
-            message = 'Perfil eliminado. El correo falló; revisa la auditoría local.'
+            message = 'Perfil eliminado. No se pudo confirmar el envío por Gmail; consulta la auditoría local.'
         if result['warnings']:
             message += ' Algunas asignaciones necesitan revisión.'
         self.statusBar().showMessage(message, 10000)

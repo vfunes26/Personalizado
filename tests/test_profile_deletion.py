@@ -177,3 +177,36 @@ def test_unconfigured_gmail_does_not_block_confirmed_profile_deletion(tmp_path):
     assert [t['id'] for t in store._read()['tasks']] == ['profile-two']
     assert 'deleted' in (tmp_path/'data/profile-deletions.jsonl').read_text()
     assert 'gmail_failed' in (tmp_path/'data/profile-deletions.jsonl').read_text()
+
+
+
+def test_unexpected_gmail_error_never_reports_successful_deletion_as_failure(tmp_path):
+    store = seeded(tmp_path)
+
+    class UnexpectedMail(Mail):
+        def send(self, subject, body):
+            raise RuntimeError('Private SMTP diagnostic which must not be surfaced')
+
+    result = ProfileDeletionService(store, mail=UnexpectedMail()).delete(
+        'profile-one', revision=store.revision(), origin='interfaz')
+    assert result['deleted'] and not result['emailed']
+    assert [row['id'] for row in store._read()['tasks']] == ['profile-two']
+    audit = (tmp_path/'data/profile-deletions.jsonl').read_text()
+    assert 'gmail_failed' in audit
+    assert 'Private SMTP diagnostic' not in audit
+
+
+def test_deletion_audit_refuses_redirected_directory(tmp_path):
+    store = seeded(tmp_path)
+    outside = tmp_path / 'outside'
+    outside.mkdir()
+    linked = tmp_path / 'linked'
+    try:
+        linked.symlink_to(outside, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip('Este sistema no permite enlaces simbólicos.')
+    service = ProfileDeletionService(store, mail=Mail())
+    service.root = linked
+    with pytest.raises(ProfileDeletionError, match='auditoría'):
+        service._audit('profile-one', 'interfaz', 'confirmed')
+    assert not list(outside.iterdir())

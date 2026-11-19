@@ -11,6 +11,7 @@ import tempfile
 
 from ..config import TIE_PROCEDURE, REGRESO_PROCEDURE
 from ..notifications import NotificationError
+from ..locking import ensure_private_path
 from ..state import StateStore
 from .gmail_service import GmailError, GmailSettings
 from .profiles import ProfileConflictError, ProfileValidationError
@@ -60,7 +61,9 @@ def profile_receipt(raw, profile_id):
 
 
 def _atomic_json(path, data):
+    ensure_private_path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
+    ensure_private_path(path)
     fd, temporary = tempfile.mkstemp(prefix='.delete-profile-', dir=path.parent)
     try:
         with os.fdopen(fd, 'w', encoding='utf-8') as stream:
@@ -83,9 +86,12 @@ class ProfileDeletionService:
 
     def _audit(self, profile_id, origin, event):
         path = self.root / 'data' / 'profile-deletions.jsonl'
-        path.parent.mkdir(parents=True, exist_ok=True)
-        if path.is_symlink():
-            raise ProfileDeletionError('La ruta de auditoría no es segura.')
+        try:
+            ensure_private_path(path)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            ensure_private_path(path)
+        except OSError:
+            raise ProfileDeletionError('La ruta de auditoría no es segura.') from None
         record = {
             'time_utc': datetime.now(timezone.utc).isoformat(),
             'profile_id': str(profile_id), 'origin': origin, 'event': event,
@@ -179,7 +185,8 @@ class ProfileDeletionService:
             if not mail_config.get('secret_ref') or not mail_config.get('recipients'):
                 raise GmailError('Gmail sin configurar')
             self.mail.send(subject, message)
-        except (GmailError, NotificationError, OSError):
+        except Exception:
+            # Deletion already succeeded. Unexpected SMTP failures cannot undo it.
             try:
                 self._audit(profile_id, origin, 'gmail_failed')
             except (OSError, ProfileDeletionError):
