@@ -168,7 +168,9 @@ class ProxyProfileStore:
 
     def _locked_read(self):
         from ..locking import locked_file
+        self._check_private_path()
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._check_private_path()
         with locked_file(self.path.with_name("." + self.path.name + ".lock")):
             raw = self._read()
             self._migrate_legacy(raw)
