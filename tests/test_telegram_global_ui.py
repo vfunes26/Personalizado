@@ -51,3 +51,25 @@ def test_global_telegram_ui_revoke_keeps_existing_profile(window):
     panel.allowed.setCurrentRow(0)
     panel.revoke_chat()
     assert [panel.allowed.item(i).text() for i in range(panel.allowed.count())] == ['22222']
+
+
+
+def test_invalid_administrator_is_rejected_before_stopping_bot(window):
+    panel=window.telegram_global_panel
+    panel.owner.setText('invalid')
+    panel.token.setText('123456:ABCDEF')
+    class DummyThread:
+        def __init__(self): self.stopped=False
+        def stop(self): self.stopped=True
+        def join(self,timeout=None): raise AssertionError('No debe detener el bot')
+        def is_alive(self): return True
+    thread=DummyThread()
+    window.inbox_thread=thread
+    try:
+        panel.save_settings()
+        assert not thread.stopped
+        assert 'principal' in panel.status.text()
+        assert not panel.store.path.exists()
+        assert panel.token.text()=='123456:ABCDEF'
+    finally:
+        window.inbox_thread=None

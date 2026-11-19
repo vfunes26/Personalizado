@@ -101,6 +101,13 @@ class TelegramGlobalPanel(QWidget):
 
     def save_settings(self):
         ids = [self.allowed.item(i).text() for i in range(self.allowed.count())]
+        token = self.token.text().strip()
+        # A rejected ID or token must never interrupt a working bot.
+        try:
+            self.store.validate(self.owner.text(), ids, token=token)
+        except TelegramGlobalError as exc:
+            self.status.setText(str(exc))
+            return
         thread = getattr(self.window, 'inbox_thread', None)
         if thread is not None:
             thread.stop()
@@ -112,7 +119,7 @@ class TelegramGlobalPanel(QWidget):
                 return
             self.window.inbox_thread = None
         try:
-            self.store.save(self.owner.text(), ids, token=self.token.text().strip())
+            self.store.save(self.owner.text(), ids, token=token)
             self.token.clear()
             self.status.setText('Administrador y permisos guardados de forma segura.')
         except TelegramGlobalError as exc:

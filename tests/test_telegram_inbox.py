@@ -408,3 +408,22 @@ def test_telegram_office_catalog_is_paged_without_truncation():
         assert len(client.sent)>=2
         assert all(len(msg)<=3900 for _chat,msg in client.sent)
         assert ''.join(msg for _chat,msg in client.sent) == long_catalog
+
+
+
+def test_revoked_telegram_id_is_silent_and_owner_still_has_access():
+    with tempfile.TemporaryDirectory() as folder:
+        from app.desktop.telegram_global import TelegramGlobalStore
+        store,vault,client,inbox,_=setup(folder)
+        settings=TelegramGlobalStore(Path(folder),vault=vault)
+        owner,other=str(ALLOWED),'222333444'
+        settings.save(owner,[other],token='123456:ABCDEF')
+        assert inbox.prepare()
+        assert inbox.handle_message(message(10,'/plantilla',chat=int(other))['message'])
+        before=len(client.sent)
+        settings.save(owner,[])
+        assert inbox.prepare()
+        assert not inbox.handle_message(message(11,'/perfiles',chat=int(other))['message'])
+        assert len(client.sent)==before
+        assert inbox.handle_message(message(12,'/perfiles',chat=ALLOWED)['message'])
+        assert len(client.sent)==before+1
