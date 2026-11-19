@@ -302,8 +302,8 @@ def _task(raw: dict[str, Any], settings: Settings, catalog: dict[str, set[str]])
         legacy=province=="Barcelona" and office in catalog.get("barcelona_offices",set())
         if full.available and office not in choices and not legacy:
             errors.append("request.office is not present in province catalog")
-        elif full.available and office in choices and not full.includes(province,procedure,office):
-            errors.append("request.procedure is not offered at the selected office")
+        # Do not invalidate existing saved profiles when catalog coverage changes.
+        # The editor filters new combinations by office; legacy pairings remain valid.
     if procedure not in PROCEDURE_NAMES:
         errors.append("request.procedure must be TIE fingerprints or autorización de regreso")
     if subprocedure not in (None, ""):
