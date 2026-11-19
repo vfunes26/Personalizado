@@ -2,6 +2,18 @@ name: CodeQL
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'app/**'
+      - 'scripts/**'
+      - '.github/workflows/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '23 6 * * 1'
 
 permissions:
   contents: read
@@ -43,4 +55,4 @@ jobs:
         uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
         with:
           category: /language:${{ matrix.language }}
-          upload: never
+          upload: always
