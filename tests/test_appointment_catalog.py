@@ -31,3 +31,47 @@ def test_original_case_accents_punctuation_and_office_names_untouched():
                for _id, name in catalog.offices("Barcelona"))
     assert "A Coruña" in catalog.province_names()
     assert "Ávila" in catalog.province_names()
+
+
+
+def test_every_office_and_procedure_matches_the_original_source_exactly():
+    import json
+
+    catalog = AppointmentCatalog()
+    source = json.loads(catalog.path.read_text(encoding='utf-8'))
+    originals = source['provinces']
+    assert catalog.province_names() == [province['name'] for province in originals]
+    assert len({province['code'] for province in originals}) == 52
+    procedures_seen = 0
+    offices_seen = 0
+    for province in originals:
+        name = province['name']
+        expected_offices = list(dict.fromkeys(
+            (str(office['id']), office['name'])
+            for procedure in province['procedures'] for office in procedure['offices']
+        ))
+        assert list(catalog.offices(name)) == expected_offices
+        actual_procedures = list(catalog.procedures(name))
+        assert [(label, code) for label, _value, code in actual_procedures] == [
+            (procedure['name'], str(procedure['id'])) for procedure in province['procedures']
+        ]
+        for procedure in province['procedures']:
+            code = str(procedure['id'])
+            label = procedure['name']
+            for office in procedure['offices']:
+                office_key = str(office['id']), office['name']
+                assert (label, code) in [
+                    (text, item_code) for text, _value, item_code
+                    in catalog.procedures(name, office_key)
+                ]
+                offices_seen += 1
+            procedures_seen += 1
+    assert procedures_seen == 824
+    assert offices_seen == 1823
+
+
+def test_unknown_office_never_returns_unfiltered_procedures():
+    catalog = AppointmentCatalog()
+    assert list(catalog.procedures('Alicante', ('not-an-id', 'not-an-office'))) == []
+    assert list(catalog.procedures('Alicante', 'not-an-office')) == []
+    assert list(catalog.offices('Provincia inventada')) == []

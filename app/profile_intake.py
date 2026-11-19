@@ -103,7 +103,8 @@ class Catalog:
             province: tuple(dict.fromkeys(name for _id,name in official.offices(province)))
             for province in official.provinces
         } if official.available else {}
-        return cls(labels('provinces'), labels('nationalities'), labels('barcelona_offices'), by_province)
+        provinces = tuple(official.province_names()) if official.available else labels('provinces')
+        return cls(provinces, labels('nationalities'), labels('barcelona_offices'), by_province)
 
     @property
     def specific_offices(self) -> tuple[str, ...]:

@@ -895,7 +895,11 @@ class DesktopWindow(QMainWindow):
         index=selector.findData(preferred)
         if index<0:
             index=selector.findData(TIE_PROCEDURE)
-        selector.setCurrentIndex(max(0,index))
+        if index<0:
+            index=selector.findData(REGRESO_PROCEDURE)
+        # A province/office without an automated procedure must not silently
+        # default to the first unsupported procedure from the snapshot.
+        selector.setCurrentIndex(index)
         selector.blockSignals(False)
         self.update_profile_document()
 

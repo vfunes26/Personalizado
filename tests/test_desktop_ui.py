@@ -1601,3 +1601,26 @@ def test_office_limits_procedures_and_preserves_catalog_spelling(window):
         'POLICÍA-TOMA DE HUELLAS (EXPEDICIÓN DE TARJETA) INICIAL, RENOVACIÓN, DUPLICADO Y LEY 14/2013'
     )
     window.profile_editor.close()
+
+
+
+def test_profile_selectors_preserve_original_province_order_and_never_choose_unsupported_default(window):
+    from app.desktop.appointment_catalog import AppointmentCatalog
+    from app.config import TIE_PROCEDURE, REGRESO_PROCEDURE
+    catalog = AppointmentCatalog()
+    window.create_profile()
+    fields=window.fields
+    assert [fields['province'].itemText(i) for i in range(fields['province'].count())] == catalog.province_names()
+    fields['province'].setCurrentText('Alicante')
+    # Locate a real office that has only procedures unsupported by automation,
+    # rather than relying on a hardcoded office name.
+    unsupported = next((
+        name for _id, name in catalog.offices('Alicante')
+        if all(value not in {TIE_PROCEDURE, REGRESO_PROCEDURE}
+               for _label, value, _code in catalog.procedures('Alicante', name))
+    ), None)
+    assert unsupported is not None
+    fields['office'].setCurrentText(unsupported)
+    assert fields['procedure'].count() > 0
+    assert fields['procedure'].currentIndex() == -1
+    window.profile_editor.close()
