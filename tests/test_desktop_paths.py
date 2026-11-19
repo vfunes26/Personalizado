@@ -1,5 +1,6 @@
 from pathlib import Path
 import sys
+import pytest
 
 from app.desktop.paths import runtime_root, resource_root, worker_arguments, APP_NAME
 
