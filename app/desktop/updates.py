@@ -256,6 +256,19 @@ class UpdateService(QObject):
             return download_release(
                 release, self.directory, job.cancelled, progress=job.progress.emit)
         return self._start(operation,self.downloaded)
+    def download_delta(self, release):
+        """Explicit differential-only download; never substitute a full package."""
+        from .paths import portable_mode
+        if not portable_mode() or release is None or release.delta is None:
+            return False
+        def operation(job):
+            patched = download_release(
+                release.delta, self.directory, job.cancelled, progress=job.progress.emit)
+            check_delta_base(Path(sys.executable).parent, patched,
+                             self.current, release.version)
+            return patched
+        return self._start(operation, self.downloaded)
+
     def verify(self,path):
         def operation(job):
             checked = verify_download(path)

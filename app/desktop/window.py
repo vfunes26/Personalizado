@@ -619,6 +619,10 @@ class DesktopWindow(QMainWindow):
         self.proxy_delete_button=QPushButton('Eliminar proxy')
         self.proxy_delete_button.clicked.connect(self.delete_proxy_definition)
         proxy_actions.addWidget(self.proxy_delete_button)
+        self.proxy_test_button=QPushButton('Probar conexión')
+        self.proxy_test_button.setObjectName('testProxyConnection')
+        self.proxy_test_button.clicked.connect(self.test_proxy_definition)
+        proxy_actions.addWidget(self.proxy_test_button)
         proxy_actions.addStretch()
         proxy_layout.addLayout(proxy_actions)
 
@@ -679,6 +683,15 @@ class DesktopWindow(QMainWindow):
         self.manual_update_button.setObjectName('manualUpdateCheck')
         self.manual_update_button.clicked.connect(self.check_updates)
         update_row.addWidget(self.manual_update_button)
+        from .paths import portable_mode
+        self.manual_delta_button=QPushButton('Descargar diferencial seguro')
+        self.manual_delta_button.setObjectName('manualDeltaDownload')
+        self.manual_delta_button.setEnabled(portable_mode())
+        self.manual_delta_button.setToolTip(
+            'Solo Windows portable: descarga un diferencial firmado y conserva la versión anterior.')
+        self.manual_delta_button.clicked.connect(self.download_safe_delta)
+        update_row.addWidget(self.manual_delta_button)
+        self.delta_download_requested=False
         self.manual_update_status=label('Consulta GitHub Releases cuando quieras; instalar requiere confirmación.',muted=True)
         update_row.addWidget(self.manual_update_status,1)
         layout.addLayout(update_row)
@@ -1389,21 +1402,59 @@ class DesktopWindow(QMainWindow):
         self.proxy_label_input.setFocus()
         self.proxy_status.setText('Introduce los datos del nuevo proxy y guárdalo.')
 
+    def _proxy_form_fields(self):
+        from .proxy_check import normalize_proxy
+        server, username, password = normalize_proxy(
+            self.proxy_server_input.text(),
+            self.proxy_username_input.text(),
+            self.proxy_password_input.text())
+        return {'label': self.proxy_label_input.text(), 'server': server,
+                'username': username, 'password': password}
+
+    def test_proxy_definition(self):
+        from .proxy_profiles import ProxyProfileStore, ProxyProfileError
+        from .proxy_check import check_proxy
+        from .notification_jobs import NotificationJobs
+        try:
+            values = ProxyProfileStore._validate_profile(self._proxy_form_fields())
+        except ProxyProfileError as exc:
+            self.proxy_status.setText(str(exc))
+            return
+        if not hasattr(self, 'proxy_test_jobs'):
+            self.proxy_test_jobs = NotificationJobs(self)
+        self.proxy_test_button.setEnabled(False)
+        self.proxy_status.setText('Comprobando autenticación y túnel HTTPS del proxy…')
+        snapshot = (self.proxy_server_input.text(), self.proxy_username_input.text(),
+                    self.proxy_password_input.text())
+        def finished(ok, result):
+            from shiboken6 import isValid
+            if not isValid(self.proxy_test_button):
+                return
+            self.proxy_test_button.setEnabled(True)
+            if snapshot != (self.proxy_server_input.text(), self.proxy_username_input.text(),
+                            self.proxy_password_input.text()):
+                self.proxy_status.setText('Los datos cambiaron; prueba el proxy de nuevo.')
+                return
+            if not ok:
+                self.proxy_status.setText('No se pudo comprobar la conexión del proxy.')
+            else:
+                accepted, detail = result
+                self.proxy_status.setText(('Conexión válida. ' if accepted else
+                                           'Conexión rechazada. ') + detail)
+        self.proxy_test_jobs.submit(
+            lambda: check_proxy(values['server'], values['username'], values['password']),
+            finished)
+
     def save_proxy_definition(self):
         from .proxy_profiles import ProxyProfileError
-        fields={
-            'label':self.proxy_label_input.text(),
-            'server':self.proxy_server_input.text(),
-            'username':self.proxy_username_input.text(),
-            'password':self.proxy_password_input.text(),
-        }
+        fields=self._proxy_form_fields()
         try:
             proxy_id=self._proxy_store().save_proxy_profile(
                 self.proxy_editing_id,
                 fields,
             )
             self._refresh_proxy_selector(proxy_id)
-            self.proxy_status.setText('Proxy guardado correctamente.')
+            self.proxy_status.setText('Proxy guardado correctamente. Puedes probar su conexión.')
         except (ProxyProfileError,OSError) as exc:
             self.proxy_status.setText(str(exc))
 
@@ -2202,7 +2253,19 @@ class DesktopWindow(QMainWindow):
         if self.update_service.check():
             self.update_message='Проверяем обновления…';self.render_updates()
 
+    def download_safe_delta(self):
+        from .paths import portable_mode
+        if not portable_mode() or self.update_service.busy:
+            return
+        self.delta_download_requested=True
+        if not self.update_service.check():
+            self.delta_download_requested=False
+            return
+        self.manual_update_status.setText('Comprobando versión y firma del diferencial…')
+
     def update_checked(self, release):
+        want_delta=self.delta_download_requested
+        self.delta_download_requested=False
         if hasattr(self, 'manual_update_status'):
             self.manual_update_status.setText(('Versión nueva: '+release.version) if release else 'No hay una versión nueva publicada.')
         if self.update_path and (release is None or self.update_path.name!=release.name):
@@ -2215,12 +2278,25 @@ class DesktopWindow(QMainWindow):
         )
         if release:
             self.footer.setText(self.t('Доступна новая версия')+': '+release.version+' — '+self.t('О приложении'))
+        if want_delta:
+            if not release or not getattr(release, 'delta', None):
+                self.manual_update_status.setText('No hay diferencial firmado para esta versión portable.')
+            elif self.update_service.download_delta(release):
+                self.manual_update_status.setText('Descargando diferencial firmado; sin modificar el portable actual.')
+            else:
+                self.manual_update_status.setText('No se pudo iniciar la descarga diferencial.')
         self.render_updates()
 
     def update_downloaded(self,path):
-        self.update_path=path;self.update_message='Обновление скачано и проверено';self.render_updates()
+        self.update_path=path;self.update_message='Обновление скачано и проверено'
+        if hasattr(self,'manual_update_status'):
+            self.manual_update_status.setText(
+                'Diferencial verificado. En «Acerca de» puedes preparar la nueva versión sin sobrescribir la anterior.'
+                if str(path).endswith('.delta.zip') else 'Actualización verificada y lista.')
+        self.render_updates()
 
     def update_failed(self,reason):
+        self.delta_download_requested=False
         if hasattr(self,'manual_update_status'):
             self.manual_update_status.setText('Error al comprobar actualizaciones; vuelve a intentarlo.')
         self.update_install_requested=False
@@ -2238,6 +2314,9 @@ class DesktopWindow(QMainWindow):
     def update_busy(self,busy):
         if hasattr(self,'manual_update_button'):
             self.manual_update_button.setEnabled(not busy)
+        if hasattr(self,'manual_delta_button'):
+            from .paths import portable_mode
+            self.manual_delta_button.setEnabled(portable_mode() and not busy)
         self.render_updates()
         if not busy and self.closing:self.close()
 
