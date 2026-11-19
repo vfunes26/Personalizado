@@ -392,3 +392,14 @@ def test_authorized_creator_cannot_list_or_delete_other_profiles():
         TelegramGlobalStore(Path(folder), vault=vault).save(str(ALLOWED), [])
         assert inbox.prepare()
         assert not inbox.handle_message(message(8, '/perfiles', chat=other)['message'])
+
+
+def test_telegram_office_catalog_is_paged_without_truncation():
+    with tempfile.TemporaryDirectory() as d:
+        store,vault,client,inbox,_=setup(d)
+        assert inbox.prepare()
+        assert inbox.handle_message(message(1,'/oficinas 28')['message'])
+        assert len(client.sent)>=2
+        assert all(len(msg)<=3900 for _chat,msg in client.sent)
+        assert 'Oficinas de Madrid' in client.sent[0][1]
+        assert all(chat==str(ALLOWED) for chat,_msg in client.sent)

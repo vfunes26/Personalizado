@@ -206,7 +206,20 @@ class TelegramInbox:
         return self._reply(chat_id, 'Comando no reconocido. Use /plantilla, /provincias, /oficinas, /perfiles o /borrar N.')
 
     def _reply(self, chat_id, text):
-        self.client.send(chat_id, text[:4000])
+        # Telegram caps messages at 4096 characters. A provincial catalog may
+        # contain more offices; split on line boundaries instead of truncating.
+        limit = 3900
+        chunk = ''
+        for line in text.splitlines(keepends=True):
+            if len(chunk) + len(line) > limit and chunk:
+                self.client.send(chat_id, chunk)
+                chunk = ''
+            while len(line) > limit:
+                self.client.send(chat_id, line[:limit])
+                line = line[limit:]
+            chunk += line
+        if chunk:
+            self.client.send(chat_id, chunk)
         return True
 
     def _visible_tasks(self, chat_id, tasks):
