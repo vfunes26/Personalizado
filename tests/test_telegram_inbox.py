@@ -137,6 +137,9 @@ def test_webhook_or_missing_recipient_disables_inbox():
         store, vault, client, inbox, _ = setup(d)
         client.webhook = 'https://example.org/hook'
         assert inbox.poll_once() == 0 and 'webhook' in inbox.disabled_reason
+        assert inbox.source is None
+        assert inbox.poll_once() == 0
+        assert not any(method == 'getUpdates' for method, _ in client.calls)
     with tempfile.TemporaryDirectory() as d:
         store = ProfileStore(Path(d) / 'profiles.yml', CATALOG)
         inbox = TelegramInbox(store, FakeVault(), client=FakeClient())
@@ -427,3 +430,83 @@ def test_revoked_telegram_id_is_silent_and_owner_still_has_access():
         assert len(client.sent)==before
         assert inbox.handle_message(message(12,'/perfiles',chat=ALLOWED)['message'])
         assert len(client.sent)==before+1
+
+
+
+def test_telegram_revocation_takes_effect_during_poll_without_manual_prepare():
+    with tempfile.TemporaryDirectory() as folder:
+        from app.desktop.telegram_global import TelegramGlobalStore
+        store, vault, client, inbox, _ = setup(folder)
+        global_store = TelegramGlobalStore(Path(folder), vault=vault)
+        delegated = '222333444'
+        global_store.save(str(ALLOWED), [delegated], token='123456:ABCDEF')
+        client.updates = [message(1, '/perfiles', chat=int(delegated))]
+        assert inbox.poll_once() == 1
+        assert delegated in inbox.listings
+        sent_before = len(client.sent)
+        # Change configuration on disk, without explicitly restarting the inbox.
+        global_store.save(str(ALLOWED), [])
+        client.updates = [
+            message(2, '/perfiles', chat=int(delegated)),
+            message(3, '/perfiles', chat=ALLOWED),
+        ]
+        assert inbox.poll_once() == 1
+        assert delegated not in inbox.listings
+        assert inbox.source.allowed_chats == {str(ALLOWED)}
+        assert len(client.sent) == sent_before + 1
+        assert client.sent[-1][0] == str(ALLOWED)
+
+
+def test_telegram_revocation_invalidates_pending_delete_buttons():
+    with tempfile.TemporaryDirectory() as folder:
+        from app.desktop.telegram_global import TelegramGlobalStore
+        store, vault, client, inbox, _ = setup(folder)
+        global_store = TelegramGlobalStore(Path(folder), vault=vault)
+        other = '222333444'
+        global_store.save(str(ALLOWED), [other], token='123456:ABCDEF')
+        assert inbox.prepare()
+        inbox.listings[other] = ('rev', ('profile_1',), 0.0)
+        inbox.pending_deletions[other] = dict(
+            token='old-confirmation', profile_id='profile_1',
+            revision='rev', created=0.0, message_id=123,
+        )
+        global_store.save(str(ALLOWED), [])
+        client.updates = [message(1, '/perfiles', chat=ALLOWED)]
+        inbox.poll_once()
+        assert other not in inbox.listings
+        assert other not in inbox.pending_deletions
+
+
+def test_telegram_switching_bot_resets_offset_and_processed_update_ids():
+    with tempfile.TemporaryDirectory() as folder:
+        from app.desktop.telegram_global import TelegramGlobalStore
+        store, vault, client, inbox, _ = setup(folder)
+        global_store = TelegramGlobalStore(Path(folder), vault=vault)
+        global_store.save(str(ALLOWED), [], token='123456:ABCDEF')
+        assert inbox.prepare()
+        inbox.offset = 890
+        inbox.handled.add(889)
+        inbox.held[888] = 0
+        global_store.save(str(ALLOWED), [], token='987654:XYZABC')
+        assert inbox.prepare()
+        assert inbox.source.token == '987654:XYZABC'
+        assert inbox.offset is None
+        assert inbox.handled == set()
+        assert inbox.held == {}
+
+
+def test_telegram_invalid_global_settings_fail_closed_while_running():
+    with tempfile.TemporaryDirectory() as folder:
+        from app.desktop.telegram_global import TelegramGlobalStore
+        store, vault, client, inbox, _ = setup(folder)
+        global_store = TelegramGlobalStore(Path(folder), vault=vault)
+        global_store.save(str(ALLOWED), ['222333444'], token='123456:ABCDEF')
+        assert inbox.prepare()
+        inbox.pending_deletions[str(ALLOWED)] = dict(token='unsafe')
+        global_store.path.write_text('configuracion dañada', encoding='utf-8')
+        before=len(client.sent)
+        client.updates=[message(1, '/perfiles', chat=ALLOWED)]
+        assert inbox.poll_once() == 0
+        assert inbox.source is None
+        assert not inbox.pending_deletions
+        assert len(client.sent) == before

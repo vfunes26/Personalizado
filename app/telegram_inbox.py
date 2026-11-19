@@ -111,32 +111,49 @@ class TelegramInbox:
         self._source_identity = None
 
     # ------------------------------------------------------------------ setup
+    @staticmethod
+    def _identity(source):
+        return (source.profile_id, source.token, tuple(sorted(source.allowed_chats)))
+
+    def _disable(self, reason):
+        """Drop all live permissions and pending destructive approvals."""
+        self.source = None
+        self._source_identity = None
+        self.listings.clear()
+        self.pending_deletions.clear()
+        self.disabled_reason = reason
+
     def prepare(self):
         """Resolve token/chats. Returns False (with ``disabled_reason``) if the inbox cannot run."""
         try:
             source = find_source(self.store, self.vault)
-        except ValueError as exc:
-            self.disabled_reason = str(exc)
+        except (ValueError, OSError):
+            self._disable('No se pudo verificar la configuración o los permisos de Telegram.')
             return False
         if source is None:
-            self.disabled_reason = 'Conecte un destinatario de Telegram en un perfil (Notificaciones) para usar el buzón.'
+            self._disable('Conecte un destinatario de Telegram en un perfil (Notificaciones) para usar el buzón.')
             return False
-        if not self._injected_client:
-            self.client = Telegram(source.token)
-        identity = (source.profile_id, source.token, tuple(sorted(source.allowed_chats)))
+        try:
+            client = self.client if self._injected_client else Telegram(source.token)
+            if client.call('getWebhookInfo').get('url'):
+                self._disable('El bot usa un webhook de otro servicio; use un bot separado.')
+                return False
+        except (NotificationError, ValueError, OSError):
+            self._disable('No se pudo consultar Telegram.')
+            return False
+        identity = self._identity(source)
         if self._source_identity is not None and self._source_identity != identity:
-            # Pending approvals are never transferable to another bot/source.
+            # Permissions cannot transfer pending deletions between sources.
             self.listings.clear()
             self.pending_deletions.clear()
+            if self._source_identity[1] != identity[1]:
+                # Update IDs and offsets belong to a specific Telegram bot.
+                self.offset = None
+                self.handled.clear()
+                self.held.clear()
+        self.client = client
         self._source_identity = identity
         self.source = source
-        try:
-            if self.client.call('getWebhookInfo').get('url'):
-                self.disabled_reason = 'El bot usa un webhook de otro servicio; use un bot separado.'
-                return False
-        except NotificationError:
-            self.disabled_reason = 'No se pudo consultar Telegram.'
-            return False
         self.disabled_reason = ''
         return True
 
@@ -148,8 +165,23 @@ class TelegramInbox:
         return None if self.offset is None else self.offset
 
     def poll_once(self):
-        if self.source is None and not self.prepare():
-            return 0
+        if self.source is None:
+            if not self.prepare():
+                return 0
+        else:
+            # A second application instance may revoke a Chat ID without
+            # restarting this worker. Recheck local permissions each poll.
+            try:
+                live = find_source(self.store, self.vault)
+            except (ValueError, OSError):
+                self._disable('No se pudo verificar la configuración o los permisos de Telegram.')
+                return 0
+            if live is None:
+                self._disable('La conexión de Telegram ya no está autorizada.')
+                return 0
+            if self._identity(live) != self._source_identity:
+                if not self.prepare():
+                    return 0
         data = {'timeout': 0, 'limit': 50, 'allowed_updates': ['message', 'callback_query']}
         offset = self._next_offset()
         if offset is not None:
