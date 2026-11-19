@@ -222,3 +222,24 @@ def test_ci_keeps_documentation_only_path_optimization():
     assert "steps.scope.outputs.docs_only != 'true'" in workflow_text
     assert "steps.scope.outputs.docs_only == 'true'" in workflow_text
     assert "pwsh -NoProfile -NonInteractive -File scripts/check_powershell_syntax.ps1" in workflow_text
+
+
+def test_codeql_scans_prs_main_changes_and_weekly_without_being_mandatory():
+    import yaml
+    root = Path(__file__).parents[1]
+    workflow = yaml.safe_load((root / '.github/workflows/codeql.yml').read_text(encoding='utf-8'))
+    events = workflow.get('on', workflow.get(True))
+    assert set(events) == {'workflow_dispatch', 'push', 'pull_request', 'schedule'}
+    assert events['push']['branches'] == ['main']
+    assert set(events['push']['paths']) == {
+        'app/**', 'scripts/**', '.github/workflows/**', 'pyproject.toml', 'uv.lock'
+    }
+    assert events['pull_request']['branches'] == ['main']
+    assert 'paths' not in events['pull_request']
+    assert events['schedule'] == [{'cron': '23 6 * * 1'}]
+    job = workflow['jobs']['analyze']
+    assert job['permissions']['security-events'] == 'write'
+    assert set(job['strategy']['matrix']['language']) == {'python', 'actions'}
+    analyze = next(step for step in job['steps'] if step.get('name') == 'Analyze')
+    assert analyze['with']['upload'] == 'always'
+    # CodeQL is advisory in this stage; Tests remains the only required check.
