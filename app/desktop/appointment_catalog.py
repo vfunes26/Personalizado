@@ -52,14 +52,16 @@ class AppointmentCatalog:
                 for item in procedure.get("offices", [])
             ):
                 continue
-            value = procedure["name"]
-            if str(procedure["id"]) == "4010":
-                value = TIE_PROCEDURE
-            elif str(procedure["id"]) in {"20", "4058"}:
-                value = REGRESO_PROCEDURE
-            if value not in seen:
-                seen.add(value)
-                yield procedure["name"], value, str(procedure["id"])
+            code, label = str(procedure["id"]), procedure["name"]
+            # Two official procedure IDs may map to one automated flow.
+            # Do not collapse those distinct source entries (e.g. in Huelva).
+            if (code, label) in seen:
+                continue
+            seen.add((code, label))
+            value = (TIE_PROCEDURE if code == "4010"
+                     else REGRESO_PROCEDURE if code in {"20", "4058"}
+                     else label)
+            yield label, value, code
 
     def includes(self, province, procedure, office=None):
         return any(value == procedure for _label, value, _id
