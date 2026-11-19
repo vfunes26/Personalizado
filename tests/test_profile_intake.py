@@ -55,7 +55,7 @@ def test_office_any_specific_number_and_other_provinces():
     bad = parse_submission(block(OFICINA='99'), CATALOG)
     assert not bad.ok
     madrid = parse_submission(block(PROVINCIA='Madrid', OFICINA='Aluche'), CATALOG)
-    assert madrid.ok and madrid.fields['request']['office'] == 'ALUCHE' and madrid.warnings
+    assert not madrid.ok and any('OFICINA' in error for error in madrid.errors
 
 
 def test_regreso_with_dni_and_tie_rejects_non_nie():
@@ -83,3 +83,13 @@ def test_summary_never_contains_full_personal_data():
     r = parse_submission(block(), CATALOG)
     assert nie() not in r.summary and '34600123456' not in r.summary and 'maria@' not in r.summary
     assert 'LOPEZ' not in r.summary.upper() and 'NANDU' not in r.summary.upper()
+
+
+def test_telegram_provincial_catalog_and_email_preserved_exactly():
+    from app.profile_intake import offices_text
+    r=parse_submission(block(PROVINCIA='03', OFICINA='CNP Alicante TIE, Campo de Mirra, 6, Alicante'), CATALOG)
+    assert r.ok, r.errors
+    assert r.fields['request']['office'] == 'CNP Alicante TIE, Campo de Mirra, 6, Alicante'
+    assert r.fields['applicant']['contact']['email'] == 'maria@correo.com'
+    assert 'Correo: maria@correo.com' in r.full_summary
+    assert 'CNP Alicante TIE, Campo de Mirra, 6, Alicante' in offices_text(CATALOG, 'Alicante')

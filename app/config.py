@@ -295,8 +295,15 @@ def _task(raw: dict[str, Any], settings: Settings, catalog: dict[str, set[str]])
             errors.append("applicant.contact.email must be a valid address when access_mode=certificate")
     if province not in catalog.get("provinces", set()):
         errors.append("request.province is not present in catalog")
-    if office and province == "Barcelona" and office not in catalog.get("barcelona_offices", set()):
-        errors.append("request.office is not present in Barcelona catalog")
+    if office:
+        from .desktop.appointment_catalog import AppointmentCatalog
+        full=AppointmentCatalog()
+        choices={name for _id,name in full.offices(province)}
+        legacy=province=="Barcelona" and office in catalog.get("barcelona_offices",set())
+        if full.available and office not in choices and not legacy:
+            errors.append("request.office is not present in province catalog")
+        elif full.available and office in choices and not full.includes(province,procedure,office):
+            errors.append("request.procedure is not offered at the selected office")
     if procedure not in PROCEDURE_NAMES:
         errors.append("request.procedure must be TIE fingerprints or autorización de regreso")
     if subprocedure not in (None, ""):

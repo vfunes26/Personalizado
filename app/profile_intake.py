@@ -90,13 +90,20 @@ class Catalog:
     provinces: tuple[str, ...]
     nationalities: tuple[str, ...]
     barcelona_offices: tuple[str, ...]
+    appointment_offices: dict[str,tuple[str,...]] = field(default_factory=dict)
 
     @classmethod
     def load(cls, path: Path) -> 'Catalog':
         selectors = json.loads(Path(path).read_text(encoding='utf-8'))['selectors']
         def labels(name):
             return tuple(str(item['label']) for item in selectors[name]['options'])
-        return cls(labels('provinces'), labels('nationalities'), labels('barcelona_offices'))
+        from .desktop.appointment_catalog import AppointmentCatalog
+        official = AppointmentCatalog()
+        by_province = {
+            province: tuple(dict.fromkeys(name for _id,name in official.offices(province)))
+            for province in official.provinces
+        } if official.available else {}
+        return cls(labels('provinces'), labels('nationalities'), labels('barcelona_offices'), by_province)
 
     @property
     def specific_offices(self) -> tuple[str, ...]:
@@ -170,20 +177,19 @@ def resolve_province(value, catalog, errors):
 
 
 def resolve_office(value, province, catalog, errors, warnings):
-    needle = fold(value)
+    needle=fold(value)
     if needle in ANY_OFFICE:
         return ''
-    if province == 'Barcelona':
-        offices = catalog.specific_offices
-        if re.fullmatch(r'\d{1,2}', needle):
-            index = int(needle)
-            if 1 <= index <= len(offices):
-                return offices[index - 1]
-            errors.append(f'OFICINA: el número debe estar entre 1 y {len(offices)} (use /oficinas)')
+    if province in catalog.appointment_offices or province == 'Barcelona':
+        offices=catalog.appointment_offices.get(province) or catalog.specific_offices
+        if re.fullmatch(r'\d{1,3}', needle):
+            index=int(needle)
+            if 1<=index<=len(offices):
+                return offices[index-1]
+            errors.append(f'OFICINA: número fuera de rango (1–{len(offices)}; use /oficinas)')
             return None
         return _resolve_choice(value, offices, 'OFICINA', errors)
-    warnings.append('OFICINA: solo se puede verificar contra el catálogo de Barcelona; '
-                    'se guarda como preferencia y se marca con ⭐ si aparece en la lista.')
+    warnings.append('OFICINA: provincia sin listado en el catálogo; preferencia no verificada.')
     return ' '.join(str(value).split())[:120].upper()
 
 
@@ -374,7 +380,7 @@ def template_text() -> str:
         'TRAMITE: TIE = toma de huellas (POLICÍA-TOMA DE HUELLAS… LEY 14/2013) · REGRESO = autorización de regreso\n'
         'PROVINCIA: nombre (Barcelona) o código INE de 2 dígitos (08). /provincias muestra la lista.\n'
         'OFICINA: CUALQUIERA (avisa con todas las oficinas que tengan cita), o parte del nombre '
-        '(GRANOLLERS), o el número de /oficinas (solo Barcelona se verifica). '
+        '(GRANOLLERS), o el número de /oficinas 08 (código de provincia). '
         'La oficina elegida se marca con ⭐ en el aviso.\n'
         'ACCESO: CERTIFICADO · CLAVE_MOVIL · CLAVE_PERMANENTE · SIN_CLAVE\n'
         'Opcionales: RELLENO: MANUAL o ACCESO (copiar de la web; no con SIN_CLAVE) · '
@@ -394,7 +400,11 @@ def provinces_text(catalog: Catalog) -> str:
     return '🗺 Provincias (código INE y nombre)\n\n' + '\n'.join(rows)
 
 
-def offices_text(catalog: Catalog) -> str:
-    rows = [f'{i}. {office}' for i, office in enumerate(catalog.specific_offices, 1)]
-    return ('🏢 Oficinas de Barcelona (use el número o parte del nombre en OFICINA)\n'
-            'CUALQUIERA = cualquier oficina\n\n' + '\n'.join(rows))
+def offices_text(catalog: Catalog, province='Barcelona') -> str:
+    offices=catalog.appointment_offices.get(province)
+    if offices is None:
+        offices=catalog.specific_offices if province=='Barcelona' else ()
+    rows=[f'{i}. {office}' for i,office in enumerate(offices,1)]
+    return (f'🏢 Oficinas de {province} (número o parte del nombre)\n'
+            'CUALQUIERA = cualquier oficina\n\n'
+            + ('\n'.join(rows) if rows else 'Sin oficinas en el catálogo local.'))

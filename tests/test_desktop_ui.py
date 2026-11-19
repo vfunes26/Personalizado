@@ -1548,7 +1548,7 @@ def test_office_selector_uses_exact_available_snapshot(window):
     assert all(field.findText(name)>=0 for name in offices)
     assert field.itemData(0)==''
     window.fields['province'].setCurrentText('Alicante')
-    assert field.count()==1 and field.currentData()==''
+    assert field.count()>1 and field.currentData()==''
     window.profile_editor.close()
 
 

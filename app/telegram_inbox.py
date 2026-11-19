@@ -189,7 +189,12 @@ class TelegramInbox:
         if command in {'/provincias'}:
             return self._reply(chat_id, provinces_text(self.catalog))
         if command in {'/oficinas'}:
-            return self._reply(chat_id, offices_text(self.catalog))
+            from .profile_intake import resolve_province
+            provided=text.split(maxsplit=1)
+            problems=[]
+            province=resolve_province(provided[1],self.catalog,problems) if len(provided)>1 else 'Barcelona'
+            return self._reply(chat_id, offices_text(self.catalog,province) if province
+                               else '⚠ '+(problems[0] if problems else 'Provincia inválida'))
         if command in {'/perfiles'}:
             return self._reply(chat_id, self._profiles_text(chat_id))
         if command == '/borrar':
