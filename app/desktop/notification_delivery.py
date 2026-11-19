@@ -94,6 +94,14 @@ class NotificationDelivery(QObject):
                     for recipient in connection.get('recipients', []):
                         allowed_events = recipient.get('events', connection.get('events', []))
                         if event_name in allowed_events:
+                            if admin and (
+                                recipient.get('type', 'private') != 'private'
+                                or str(recipient.get('id', '')) not in {
+                                    admin['owner_chat_id'], *admin['authorized_chat_ids']
+                                }
+                            ):
+                                # Global bot recipients must be approved private IDs.
+                                continue
                             recipients.append(recipient)
                 recipients_by_id = {str(r['id']): r for r in recipients if r.get('id')}
                 if not recipients_by_id and not (
@@ -109,7 +117,7 @@ class NotificationDelivery(QObject):
                     continue
                 secret = (copy.deepcopy(self.secrets.get(connection.get('secret_ref', '')))
                           if self.prepared_profile == profile_id else None)
-            def deliver(channel=channel,connection=connection,secret=secret):
+            def deliver(channel=channel,connection=connection,secret=secret,admin=admin):
                 if not current():raise NotificationError('Уведомление устарело')
                 if secret is None:raise NotificationError('Секреты уведомлений не подготовлены. Проверить настройки до запуска поиска.')
                 if channel=='telegram':
@@ -117,6 +125,19 @@ class NotificationDelivery(QObject):
                     failures=0;accepted=0
                     for recipient in connection.get('recipients',[]):
                         if not current():raise NotificationError('Уведомление устарело')
+                        if admin:
+                            # Recheck access at dispatch: permissions may change while queued.
+                            try:
+                                latest = TelegramGlobalStore(
+                                    Path(self.store.path).parent, vault=self.vault).load()
+                            except TelegramGlobalError as exc:
+                                raise NotificationError(str(exc)) from None
+                            if (not latest['enabled']
+                                    or latest['secret_ref'] != admin['secret_ref']):
+                                raise NotificationError('La configuración global de Telegram cambió.')
+                            permitted = {latest['owner_chat_id'], *latest['authorized_chat_ids']}
+                            if str(recipient['id']) not in permitted:
+                                continue
                         try:client.send(recipient['id'],message,current);accepted+=1
                         except NotificationError:failures+=1
                     if failures:return 'Уведомление доставлено не всем получателям' if accepted else 'Не удалось доставить уведомление'

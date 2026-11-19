@@ -148,3 +148,35 @@ def test_backup_never_reimports_old_gmail_vault_reference(tmp_path):
     assert data['sender'] == 'sender@gmail.com'
     assert data['recipients'] == ['one@example.com']
     assert data['secret_ref'] == ''
+
+
+
+@pytest.mark.parametrize('parent_redirect', [False, True])
+def test_gmail_rejects_symbolic_links_before_reading_or_saving(tmp_path, parent_redirect):
+    outside = tmp_path / 'outside'
+    outside.mkdir()
+    target = outside / 'gmail-settings.json'
+    target.write_text(json.dumps({
+        'sender': 'external@gmail.com', 'recipients': ['unauthorized@example.com'],
+        'secret_ref': 'notifications-' + 'a' * 32,
+    }), encoding='utf-8')
+    if parent_redirect:
+        link = tmp_path / 'linked-data'
+        path = link / 'gmail-settings.json'
+        source = outside
+    else:
+        link = tmp_path / 'gmail-settings.json'
+        path = link
+        source = target
+    try:
+        link.symlink_to(source, target_is_directory=parent_redirect)
+    except (NotImplementedError, OSError):
+        pytest.skip('Este sistema no permite enlaces simbólicos.')
+    vault = Vault()
+    service = GmailSettings(path, vault=vault, smtp_factory=SMTP)
+    with pytest.raises(GmailError, match='ruta de configuración'):
+        service.read()
+    with pytest.raises(GmailError, match='ruta de configuración'):
+        service.save('sender@gmail.com', 'allowed@example.com', 'abcdefghijklmnop')
+    assert not vault.rows
+    assert 'unauthorized@example.com' in target.read_text(encoding='utf-8')
