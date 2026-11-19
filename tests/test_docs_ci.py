@@ -191,7 +191,7 @@ def test_scope_main_runs_full_checks_when_git_comparison_fails(repository, monke
     assert 'Git comparison failed' in capsys.readouterr().out
 
 
-def test_tests_ci_executes_on_relevant_main_changes_and_pull_requests():
+def test_tests_ci_executes_on_relevant_main_changes_and_all_pull_requests():
     import yaml
     workflow = yaml.safe_load((Path(__file__).parents[1] / '.github/workflows/tests.yml').read_text(encoding='utf-8'))
     # PyYAML may parse the YAML 1.1 'on' key as True.
@@ -207,7 +207,9 @@ def test_tests_ci_executes_on_relevant_main_changes_and_pull_requests():
         'README*.md', 'CHANGELOG.md', 'LICENSE', 'docs/**',
     }
     assert set(triggers['push']['paths']) == expected
-    assert set(triggers['pull_request']['paths']) == expected
+    # Incluso un PR de archivos no incluidos en los filtros push debe dar estado Tests.
+    assert 'paths' not in triggers['pull_request']
+    assert 'paths-ignore' not in triggers['pull_request']
     # CI must not automatically compile Windows: that workflow is manual.
     windows = yaml.safe_load((Path(__file__).parents[1] / '.github/workflows/build-windows-portable.yml').read_text(encoding='utf-8'))
     windows_events = windows.get('on', windows.get(True))
