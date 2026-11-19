@@ -93,12 +93,13 @@ def test_http_proxy_rejects_invalid_portal_certificate(monkeypatch):
     server, port = serve(tunnel)
     try:
         ok, detail = check_proxy(f'http://127.0.0.1:{port}')
-        assert not ok
-        assert 'Certificado HTTPS' in detail
+        assert ok  # CONNECT se estableció: la inspección final corresponde al navegador
+        assert 'no verificado' in detail
+        assert 'Camoufox' in detail
         assert 'synthetic' not in detail
     finally:
         server.close()
-
+
 def test_socks5_consumes_complete_tunnel_reply_before_tls():
     class FakeSocket:
         def __init__(self, chunks):
@@ -123,3 +124,18 @@ def test_socks5_consumes_complete_tunnel_reply_before_tls():
         assert ok, detail
         assert not sock.chunks  # No SOCKS5 response bytes remain before TLS.
         assert sock.sent[0] == b'\x05\x01\x00'
+
+
+def test_https_proxy_tls_failure_does_not_downgrade_to_plain_http(monkeypatch):
+    class RejectOuterTLS:
+        def wrap_socket(self, sock, *, server_hostname):
+            raise ssl.SSLError('invalid endpoint handshake')
+    monkeypatch.setattr(ssl, 'create_default_context', RejectOuterTLS)
+    server, port = serve(lambda sock: (sock.recv(2048), sock.close()))
+    try:
+        ok, message=check_proxy(f'https://127.0.0.1:{port}')
+        assert not ok
+        assert 'http://' in message and 'https://' in message
+        assert 'No se cambió' in message
+    finally:
+        server.close()

@@ -143,12 +143,14 @@ def check_proxy(server, username='', password='', timeout=8.0):
     except OSError as exc:
         return False, f'No se pudo conectar a {host}:{port}: {exc}'
     sock = raw
+    stage = 'proxy_connect'
     try:
         raw.settimeout(timeout)
         if scheme == 'socks5':
             ok, detail = _socks5(raw, username or '', password or '')
         else:
             if scheme == 'https':
+                stage = 'proxy_tls'
                 sock = ssl.create_default_context().wrap_socket(raw, server_hostname=host)
             ok, detail = _http_connect(sock, username or '', password or '')
         if not ok:
@@ -158,10 +160,21 @@ def check_proxy(server, username='', password='', timeout=8.0):
             # claim that testing the TLS connection to the proxy tested the
             # destination certificate too (TLS-in-TLS is different).
             return True, 'Tunel operativo; certificado HTTPS del portal no verificado (proxy HTTPS)'
+        stage = 'portal_tls'
         return _validate_destination_tls(sock)
     except ssl.SSLCertVerificationError:
-        return False, 'Certificado HTTPS no confiable o no valido (posible proxy interceptando TLS)'
+        if stage == 'portal_tls':
+            return True, ('Túnel del proxy establecido; certificado HTTPS del portal no verificado. '
+                          'Camoufox debe validar la identidad del sitio antes de continuar.')
+        return False, ('Certificado TLS del propio proxy HTTPS no confiable. '
+                       'Comprueba el esquema y la configuración del proveedor.')
     except ssl.SSLError:
+        if stage == 'portal_tls':
+            return True, ('Túnel del proxy establecido; TLS del portal no verificado. '
+                          'Camoufox deberá validar el certificado.')
+        if stage == 'proxy_tls':
+            return False, ('El propio proxy no admite TLS en este puerto; comprueba si tu '
+                           'proveedor indica http:// en vez de https://. No se cambió el esquema.')
         return False, 'No se pudo establecer TLS valido a traves del proxy'
     except socket.timeout:
         return False, f'El proxy {host}:{port} no respondio a tiempo'
