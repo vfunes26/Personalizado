@@ -30,7 +30,9 @@ class AppointmentCatalog:
         self.available = bool(self.provinces)
 
     def province_names(self):
-        return sorted(self.provinces, key=str.casefold)
+        # The supplied catalog order is part of the official snapshot.
+        # Do not re-sort or remove accents from displayed province labels.
+        return list(self.provinces)
 
     def offices(self, province):
         seen = set()

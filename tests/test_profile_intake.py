@@ -93,3 +93,17 @@ def test_telegram_provincial_catalog_and_email_preserved_exactly():
     assert r.fields['applicant']['contact']['email'] == 'maria@correo.com'
     assert 'Correo: maria@correo.com' in r.full_summary
     assert 'CNP Alicante TIE, Campo de Mirra, 6, Alicante' in offices_text(CATALOG, 'Alicante')
+
+
+
+def test_telegram_provinces_preserve_order_and_codes_from_official_snapshot():
+    import json
+    from app.desktop.appointment_catalog import AppointmentCatalog
+    from app.profile_intake import Catalog, PROVINCE_CODES
+    official = AppointmentCatalog()
+    source = json.loads(official.path.read_text(encoding='utf-8'))['provinces']
+    catalog = Catalog.load(official.path.parent / 'snapshot-2026-08-12.json')
+    assert catalog.provinces == tuple(province['name'] for province in source)
+    assert {province['code']: province['name'] for province in source} == PROVINCE_CODES
+    for province in source:
+        assert parse_submission(block(PROVINCIA=province['code']), catalog).fields['request']['province'] == province['name']
