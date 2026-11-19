@@ -266,15 +266,15 @@ def test_delete_telegram_refuses_running_profile():
         assert 'ejecución' in client.sent[-1][1]
 
 
-def test_delete_telegram_needs_gmail_before_confirmation():
+def test_delete_telegram_can_confirm_without_gmail():
     with tempfile.TemporaryDirectory() as directory:
         store, client, inbox, mail, _ = _created_for_deletion(directory)
         mail.enabled = False
         client.updates = [message(3, '/borrar 2')]
         inbox.poll_once()
-        assert 'Configura Gmail' in client.sent[-1][1]
         assert len(store.load()) == 2
-        assert not any(method == 'sendMessage' for method, _ in client.calls)
+        assert any(method == 'sendMessage' for method, _ in client.calls)
+        assert inbox.pending_deletions
 
 
 def test_delete_needs_fresh_list_after_restart():

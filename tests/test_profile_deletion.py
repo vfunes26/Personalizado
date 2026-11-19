@@ -101,10 +101,10 @@ def test_delete_removes_only_selected_profile_and_notifies_allowed_mail(tmp_path
     assert 'profile-two' in proxy['assignments']
 
 
-@pytest.mark.parametrize('condition', ['missing_gmail','busy','protected','stale'])
+@pytest.mark.parametrize('condition', ['busy','protected','stale'])
 def test_delete_refuses_without_changing_data(tmp_path, condition):
     store = seeded(tmp_path)
-    mail = Mail(enabled=condition != 'missing_gmail')
+    mail = Mail()
     service = ProfileDeletionService(
         store, mail=mail, busy_checker=(lambda profile_id: condition == 'busy'),
     )
@@ -166,3 +166,14 @@ def test_post_delete_audit_failure_does_not_report_false_failed_deletion(tmp_pat
     assert 'auditoría' in result['warnings']
     assert len(mail.sent) == 1
     assert [row['id'] for row in store._read()['tasks']] == ['profile-two']
+
+
+def test_unconfigured_gmail_does_not_block_confirmed_profile_deletion(tmp_path):
+    store=seeded(tmp_path)
+    mail=Mail(enabled=False)
+    result=ProfileDeletionService(store,mail=mail).delete(
+        'profile-one', revision=store.revision(), origin='telegram')
+    assert result['deleted'] is True and result['emailed'] is False
+    assert [t['id'] for t in store._read()['tasks']] == ['profile-two']
+    assert 'deleted' in (tmp_path/'data/profile-deletions.jsonl').read_text()
+    assert 'gmail_failed' in (tmp_path/'data/profile-deletions.jsonl').read_text()
