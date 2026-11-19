@@ -193,12 +193,12 @@ class ProxyProfileStore:
                 "El proxy debe utilizar HTTP, HTTPS o SOCKS5."
             )
 
-        if not parsed.hostname or port is None:
+        if not parsed.hostname or port is None or not 1 <= port <= 65535:
             raise ProxyProfileError(
                 "El proxy debe incluir servidor y puerto."
             )
 
-        if parsed.username or parsed.password:
+        if '@' in parsed.netloc:
             raise ProxyProfileError(
                 "Introduce las credenciales en sus campos separados."
             )
@@ -228,6 +228,12 @@ class ProxyProfileStore:
 
         if len(username) > 256 or len(password) > 256:
             raise ProxyProfileError("Las credenciales son demasiado largas.")
+        if any(char in username + password for char in '\r\n\0') or ':' in username:
+            raise ProxyProfileError("Las credenciales contienen caracteres no admitidos.")
+        if server.lower().startswith('socks5://') and (
+                len(username.encode('utf-8')) > 255 or
+                len(password.encode('utf-8')) > 255):
+            raise ProxyProfileError("Las credenciales SOCKS5 exceden 255 bytes.")
 
         if bool(username) != bool(password):
             raise ProxyProfileError(
@@ -272,6 +278,9 @@ class ProxyProfileStore:
             username = normalized.pop("username")
             password = normalized.pop("password")
             new_ref = None
+            if existing and existing.get('secret_ref') and not username:
+                # A missing WinVault secret must never become an anonymous proxy.
+                self.vault.get(existing['secret_ref'])
             if username:
                 old_ref = existing.get("secret_ref") if existing else None
                 try:
@@ -375,7 +384,9 @@ class ProxyProfileStore:
     def unbind_request_profile(self, request_profile_id):
         """Discard only this application's obsolete proxy binding."""
         from ..locking import locked_file
+        self._check_private_path()
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._check_private_path()
         with locked_file(self.path.with_name("." + self.path.name + ".lock")):
             raw = self._read()
             self._migrate_legacy(raw)

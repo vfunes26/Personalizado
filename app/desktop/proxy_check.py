@@ -71,22 +71,29 @@ def _http_connect(sock, username, password):
         return False, 'Credenciales del proxy rechazadas (407)'
     if code == 403:
         return False, 'El proxy no permite el acceso al sitio (403)'
-    return False, 'Respuesta inesperada del proxy: ' + (line or 'vacia')
+    return False, (f'Respuesta HTTP {code} del proxy' if code else
+                   'Respuesta HTTP inválida del proxy')
 
 
 def _socks5(sock, username, password):
-    sock.sendall(b'\x05\x02\x00\x02' if username else b'\x05\x01\x00')
+    # When credentials are configured, never offer anonymous SOCKS5.
+    sock.sendall(b'\x05\x01\x02' if username else b'\x05\x01\x00')
     reply = _read_exact(sock, 2)
     if reply[0] != 5:
         return False, 'El servidor no responde como SOCKS5'
     if reply[1] == 0xFF:
         return False, 'El proxy SOCKS5 no acepta el metodo de autenticacion'
+    if reply[1] != (2 if username else 0):
+        return False, 'El proxy SOCKS5 eligió un método no autorizado'
     if reply[1] == 2:
         if not username:
             return False, 'El proxy SOCKS5 exige usuario y contrasena'
         user, secret = username.encode('utf-8'), password.encode('utf-8')
+        if not user or not secret or len(user) > 255 or len(secret) > 255:
+            return False, 'Credenciales SOCKS5 no válidas'
         sock.sendall(b'\x01' + bytes([len(user)]) + user + bytes([len(secret)]) + secret)
-        if _read_exact(sock, 2)[1] != 0:
+        auth = _read_exact(sock, 2)
+        if auth[0] != 1 or auth[1] != 0:
             return False, 'Credenciales del proxy SOCKS5 rechazadas'
     host = TARGET_HOST.encode('ascii')
     sock.sendall(b'\x05\x01\x00\x03' + bytes([len(host)]) + host + TARGET_PORT.to_bytes(2, 'big'))
@@ -130,8 +137,14 @@ def check_proxy(server, username='', password='', timeout=8.0):
         scheme, host, port = parts.scheme.lower(), parts.hostname, parts.port
     except ValueError:
         return False, 'Direccion de proxy invalida'
-    if not host or not port:
-        return False, 'El proxy debe incluir servidor y puerto'
+    if scheme not in {'http', 'https', 'socks5'} or not host or not port:
+        return False, 'El proxy debe incluir servidor, puerto y esquema HTTP, HTTPS o SOCKS5'
+    if not isinstance(username, str) or not isinstance(password, str):
+        return False, 'Credenciales del proxy no válidas'
+    if any(c in username + password for c in '\r\n\0') or (username and ':' in username):
+        return False, 'Credenciales del proxy no válidas'
+    if bool(username) != bool(password):
+        return False, 'El proxy requiere usuario y contraseña juntos'
     try:
         raw = socket.create_connection((host, port), timeout=timeout)
     except socket.timeout:
@@ -140,8 +153,8 @@ def check_proxy(server, username='', password='', timeout=8.0):
         return False, f'No se pudo resolver el servidor {host}'
     except ConnectionRefusedError:
         return False, f'Conexion rechazada por {host}:{port}'
-    except OSError as exc:
-        return False, f'No se pudo conectar a {host}:{port}: {exc}'
+    except OSError:
+        return False, f'No se pudo conectar a {host}:{port}'
     sock = raw
     stage = 'proxy_connect'
     try:
@@ -164,22 +177,22 @@ def check_proxy(server, username='', password='', timeout=8.0):
         return _validate_destination_tls(sock)
     except ssl.SSLCertVerificationError:
         if stage == 'portal_tls':
-            return True, ('Túnel del proxy establecido; certificado HTTPS del portal no verificado. '
-                          'Camoufox debe validar la identidad del sitio antes de continuar.')
+            return False, ('Túnel establecido, pero el certificado HTTPS del portal no es confiable. '
+                           'No se iniciará Camoufox con este proxy.')
         return False, ('Certificado TLS del propio proxy HTTPS no confiable. '
                        'Comprueba el esquema y la configuración del proveedor.')
     except ssl.SSLError:
         if stage == 'portal_tls':
-            return True, ('Túnel del proxy establecido; TLS del portal no verificado. '
-                          'Camoufox deberá validar el certificado.')
+            return False, ('Túnel establecido, pero no se pudo validar TLS del portal. '
+                           'No se iniciará Camoufox con este proxy.')
         if stage == 'proxy_tls':
             return False, ('El propio proxy no admite TLS en este puerto; comprueba si tu '
                            'proveedor indica http:// en vez de https://. No se cambió el esquema.')
         return False, 'No se pudo establecer TLS valido a traves del proxy'
     except socket.timeout:
         return False, f'El proxy {host}:{port} no respondio a tiempo'
-    except (OSError, ssl.SSLError, ValueError) as exc:
-        return False, f'Error del proxy {host}:{port}: {exc}'
+    except (OSError, ssl.SSLError, ValueError):
+        return False, f'Error de comunicación con el proxy {host}:{port}'
     finally:
         with suppress(OSError):
             sock.close()

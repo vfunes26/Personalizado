@@ -255,7 +255,7 @@ class WorkerPool(QObject):
             try:
                 ok, detail = future.result()
             except Exception as exc:
-                ok, detail = False, f'error inesperado: {exc}'
+                ok, detail = False, 'error inesperado al comprobar el proxy'
             label = slot.proxy['label'] if slot.proxy else ''
             if not ok:
                 slot.refuse(f'El proxy «{label}» falló: {detail}. No se utilizará la IP local.')
