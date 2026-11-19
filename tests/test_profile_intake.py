@@ -55,7 +55,7 @@ def test_office_any_specific_number_and_other_provinces():
     bad = parse_submission(block(OFICINA='99'), CATALOG)
     assert not bad.ok
     madrid = parse_submission(block(PROVINCIA='Madrid', OFICINA='Aluche'), CATALOG)
-    assert not madrid.ok and any('OFICINA' in error for error in madrid.errors
+    assert not madrid.ok and any('OFICINA' in error for error in madrid.errors)
 
 
 def test_regreso_with_dni_and_tie_rejects_non_nie():
