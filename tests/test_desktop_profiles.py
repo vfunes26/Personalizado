@@ -175,3 +175,25 @@ def test_applicant_warning_mode_migrates_and_roundtrips_independently(tmp_path,c
     assert task.applicant_no_slots_mode=='continue' and task.no_slots_mode==result_mode
     raw['request']['applicant_no_slots_mode']='invalid'
     with pytest.raises(ProfileValidationError):store.save_profile(profile,raw,revision=store.revision())
+
+
+
+def test_edit_profile_preserves_telegram_owner_and_extra_contact_metadata(tmp_path, catalog_path, task_mapping):
+    store=ProfileStore(tmp_path/'tasks.yml',catalog_path)
+    initial=fields(task_mapping)
+    initial['telegram_owner_chat_id']='1122334455'
+    initial['applicant']['contact']['reference_note']='Dato existente de prueba'
+    first=store.save_profile(None,initial,revision=store.revision())
+    other=store.save_profile(None,fields(task_mapping),revision=store.revision())
+    original_other=store.raw_profile(other)
+    update=fields(task_mapping)
+    update['applicant']['contact']['email']='nuevo@example.com'
+    store.save_profile(first,update,revision=store.revision())
+    raw=ProfileStore(store.path,catalog_path).raw_profile(first)
+    assert raw['telegram_owner_chat_id']=='1122334455'
+    assert raw['applicant']['contact']=={
+        'phone':'600000000',
+        'email':'nuevo@example.com',
+        'reference_note':'Dato existente de prueba',
+    }
+    assert store.raw_profile(other)==original_other

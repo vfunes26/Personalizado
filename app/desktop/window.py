@@ -448,7 +448,7 @@ class DesktopWindow(QMainWindow):
         countries=sorted(_load_catalog(self.store.catalog_path)['nationalities'])
         positions={'label':(0,0,1),'province':(0,1,1),'procedure':(1,0,1),'access_mode':(1,1,1),
                    'fill_mode':(2,0,2),'document_type':(3,0,1),'document_number':(3,1,1),'full_name':(4,0,2),
-                   'nationality':(6,0,2),'phone':(5,0,1),'email':(5,1,1),'office':(7,0,2),
+                   'nationality':(6,0,2),'phone':(5,0,1),'email':(5,1,1),'office':(8,0,2),
                    'delay_min':(7,0,1),'delay_max':(7,1,1)}
         grid.setColumnStretch(0,1);grid.setColumnStretch(1,1)
         self.profile_field_boxes={}
@@ -892,14 +892,9 @@ class DesktopWindow(QMainWindow):
         # Keep a saved historical value editable even when the snapshot changed.
         if selected is not None and preferred and selector.findData(preferred)<0:
             selector.addItem(PROCEDURE_NAMES.get(preferred,preferred)+' (perfil anterior)',preferred)
-        index=selector.findData(preferred)
-        if index<0:
-            index=selector.findData(TIE_PROCEDURE)
-        if index<0:
-            index=selector.findData(REGRESO_PROCEDURE)
-        # A province/office without an automated procedure must not silently
-        # default to the first unsupported procedure from the snapshot.
-        selector.setCurrentIndex(index)
+        # Keep the selected procedure only if it belongs to this office.
+        # Never silently replace a previous Regreso choice with TIE (or vice versa).
+        selector.setCurrentIndex(selector.findData(preferred))
         selector.blockSignals(False)
         self.update_profile_document()
 
@@ -1505,6 +1500,9 @@ class DesktopWindow(QMainWindow):
 
     def save_profile(self):
         f=self.fields
+        if f['procedure'].currentIndex() < 0:
+            self.form_error.setText('Selecciona un trámite válido para la provincia y la oficina elegidas.')
+            return
         if f['procedure'].currentData() not in PROCEDURE_NAMES:
             self.form_error.setText(
                 'Este trámite figura en el catálogo original, pero su automatización '

@@ -1624,3 +1624,58 @@ def test_profile_selectors_preserve_original_province_order_and_never_choose_uns
     assert fields['procedure'].count() > 0
     assert fields['procedure'].currentIndex() == -1
     window.profile_editor.close()
+
+
+
+def test_profile_office_field_does_not_overlap_delay_controls(window):
+    window.create_profile()
+    grid=window.profile_grid
+    office=grid.itemAtPosition(8,0).widget()
+    minimum=grid.itemAtPosition(7,0).widget()
+    maximum=grid.itemAtPosition(7,1).widget()
+    assert office is window.profile_field_boxes['office']
+    assert office is not minimum and office is not maximum
+    window.profile_editor.close()
+
+
+def test_switching_office_never_selects_an_unrequested_procedure(window):
+    from app.config import TIE_PROCEDURE
+    window.create_profile()
+    f=window.fields
+    f['province'].setCurrentText('Alicante')
+    f['office'].setCurrentText('CNP Alicante TIE, Campo de Mirra, 6, Alicante')
+    assert f['procedure'].findData(TIE_PROCEDURE) >= 0
+    f['procedure'].setCurrentIndex(f['procedure'].findData(TIE_PROCEDURE))
+    f['office'].setCurrentText('CNP Alicante NIE, Ebanistería, 4-6, Alicante')
+    assert f['procedure'].currentIndex() == -1
+    before=window.store.revision()
+    window.save_profile()
+    assert window.store.revision() == before
+    assert 'Selecciona un trámite válido' in window.form_error.text()
+    window.profile_editor.close()
+
+
+def test_edit_profile_roundtrip_keeps_selected_office_and_contact(window, task_mapping):
+    from tests.test_desktop_profiles import fields
+    from app.config import TIE_PROCEDURE
+    data=fields(task_mapping)
+    data['request']['province']='Alicante'
+    data['request']['office']='CNP Alicante TIE, Campo de Mirra, 6, Alicante'
+    data['request']['procedure']=TIE_PROCEDURE
+    profile=window.store.save_profile(None,data,revision=window.store.revision())
+    window.refresh_profiles(profile)
+    window.open_editor(profile)
+    f=window.fields
+    assert f['province'].currentText()=='Alicante'
+    assert f['office'].currentData()=='CNP Alicante TIE, Campo de Mirra, 6, Alicante'
+    assert f['procedure'].currentData()==TIE_PROCEDURE
+    f['email'].setText('nuevo@example.com')
+    window.save_profile()
+    assert not window.profile_editor.isVisible(), window.form_error.text()
+    saved=window.store.raw_profile(profile)
+    assert saved['applicant']['contact']['email']=='nuevo@example.com'
+    assert saved['request']['office']=='CNP Alicante TIE, Campo de Mirra, 6, Alicante'
+    window.open_editor(profile)
+    assert f['email'].text()=='nuevo@example.com'
+    assert f['office'].currentData()=='CNP Alicante TIE, Campo de Mirra, 6, Alicante'
+    window.profile_editor.close()
