@@ -390,7 +390,7 @@ class TelegramInbox:
             return self._reply(chat_id, str(exc))
         self.listings.pop(chat_id, None)
         suffix = ('Comprobante enviado por Gmail.' if result['emailed'] else
-                  'El correo no pudo enviarse; consulta la auditoría local.')
+                  'No se pudo confirmar el envío por Gmail; consulta la auditoría local.')
         if result['warnings']:
             suffix += ' Algunas asignaciones locales requieren revisión.'
         self._notify_owner(chat_id, '🗑 Perfil eliminado por un ID autorizado: «' + pending['label'] + '».')
