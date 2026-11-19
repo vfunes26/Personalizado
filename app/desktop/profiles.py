@@ -144,7 +144,15 @@ class ProfileStore:
         for key in ('label', 'request', 'applicant', 'timings', 'notifications', 'telegram_owner_chat_id'):
             if key in fields:
                 if isinstance(fields[key], dict):
-                    task.setdefault(key, {}).update(copy.deepcopy(fields[key]))
+                    updated = copy.deepcopy(fields[key])
+                    # The visual editor only exposes telephone and email. Do
+                    # not discard additional saved contact metadata on edit.
+                    if key == 'applicant' and existing is not None:
+                        previous_contact = task.get('applicant', {}).get('contact')
+                        new_contact = updated.get('contact')
+                        if isinstance(previous_contact, dict) and isinstance(new_contact, dict):
+                            updated['contact'] = {**copy.deepcopy(previous_contact), **new_contact}
+                    task.setdefault(key, {}).update(updated)
                 else:
                     task[key] = fields[key]
         task['id'] = profile_id
