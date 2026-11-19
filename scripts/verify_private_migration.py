@@ -19,17 +19,30 @@ def _redirected(path):
     return path.is_symlink() or getattr(path, 'is_junction', lambda: False)()
 
 
+def _windows_long_path(path):
+    """Avoid Win32 MAX_PATH errors in nested Firefox extension storage."""
+    raw = str(path.absolute())
+    if raw.startswith('\\\\?\\'):
+        return raw
+    if raw.startswith('\\\\'):
+        return '\\\\?\\UNC\\' + raw[2:]
+    return '\\\\?\\' + raw
+
+
 def _inventory(root):
     root = Path(root)
     if not root.is_dir() or _redirected(root):
         raise MigrationError('La carpeta de datos no existe o es un enlace.')
+    # Use an extended-length path to avoid silently skipping deep Firefox
+    # extension folders on Windows even if LongPathsEnabled is disabled.
+    walk_root = Path(_windows_long_path(root)) if os.name == 'nt' else root
     result = {}
 
     def walk_error(exc):
         # os.walk silently skips unreadable/deep directories without onerror.
         raise MigrationError('No se pudo leer por completo la carpeta privada.') from exc
 
-    for directory, folders, files in os.walk(root, topdown=True, followlinks=False,
+    for directory, folders, files in os.walk(walk_root, topdown=True, followlinks=False,
                                              onerror=walk_error):
         current = Path(directory)
         if _redirected(current):
@@ -41,7 +54,7 @@ def _inventory(root):
             item = current / name
             if not item.is_file() or _redirected(item):
                 raise MigrationError('Archivo privado enlazado o inaccesible.')
-            relative = item.relative_to(root).as_posix()
+            relative = item.relative_to(walk_root).as_posix()
             with item.open('rb') as stream:
                 before = os.fstat(stream.fileno())
                 digest = hashlib.file_digest(stream, 'sha256').digest()
