@@ -117,3 +117,18 @@ def test_proxy_endpoint_rejects_empty_embedded_credentials_and_port_zero():
     for server in ['http://@127.0.0.1:8080', 'http://localhost:0']:
         with pytest.raises(ProxyProfileError):
             ProxyProfileStore.validate_endpoint(server)
+
+
+
+def test_stale_active_proxy_binding_never_falls_back_to_local_ip(tmp_path):
+    import json
+    path = tmp_path/'proxy-profiles.json'
+    store = ProxyProfileStore(path)
+    proxy_id = store.save_proxy_profile(None, {'label': 'Sin credenciales',
+                                             'server': 'http://127.0.0.1:8080'})
+    store.bind_request_profile('profile-one', proxy_id, enabled=True)
+    raw = json.loads(path.read_text(encoding='utf-8'))
+    raw['assignments']['profile-one']['proxy_profile_id'] = 'proxy_missing'
+    path.write_text(json.dumps(raw), encoding='utf-8')
+    with pytest.raises(ProxyProfileError, match='IP local'):
+        store.proxy_for_request('profile-one')

@@ -2253,8 +2253,12 @@ class DesktopWindow(QMainWindow):
             self.update_message='Проверяем обновления…';self.render_updates()
 
     def download_safe_delta(self):
+        if self.update_service.busy:
+            return
         if self.update_service.check_and_download_delta():
+            self.update_path=None
             self.manual_update_status.setText('Comprobando y descargando diferencial firmado…')
+            self.render_updates()
 
     def update_checked(self, release):
         if hasattr(self, 'manual_update_status'):

@@ -273,8 +273,10 @@ class WorkerPool(QObject):
             if proxy:
                 store.bind_request_profile(slot.profile_id, proxy['id'], enabled=True)
                 current = store.proxy_for_request(slot.profile_id)
-                if not current or current.get('server') != proxy['server']:
-                    raise ProxyProfileError('no se pudo fijar el proxy para este perfil')
+                if (not current or current.get('server') != proxy['server']
+                        or current.get('username', '') != proxy.get('username', '')
+                        or current.get('password', '') != proxy.get('password', '')):
+                    raise ProxyProfileError('el proxy o sus credenciales cambiaron desde la comprobación')
             else:
                 try:
                     store.bind_request_profile(slot.profile_id, store.assignment_for(slot.profile_id)['proxy_profile_id'], enabled=False)

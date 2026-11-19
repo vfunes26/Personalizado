@@ -415,7 +415,11 @@ class ProxyProfileStore:
             (item for item in raw["proxy_profiles"] if item.get("id") == proxy_profile_id),
             None,
         )
-        if selected and selected.get("credentials_unavailable"):
+        if selected is None:
+            raise ProxyProfileError(
+                "El proxy asignado ya no existe. No se utilizará la IP local."
+            )
+        if selected.get("credentials_unavailable"):
             raise ProxyProfileError(
                 "El proxy tiene credenciales no disponibles en este equipo. "
                 "Abre su configuracion e introduce usuario y contrasena de nuevo."
