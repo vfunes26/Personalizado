@@ -186,3 +186,88 @@ def test_packaged_version_missing_metadata_fails_without_cache(tmp_path):
     from app.desktop.paths import bundled_browser_major_version
     with pytest.raises(FileNotFoundError):
         bundled_browser_major_version(tmp_path / 'camoufox-bin')
+
+
+def test_fresh_camoufox_profile_removed_on_cancel_during_launch(monkeypatch, tmp_path):
+    import asyncio
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    import camoufox.async_api
+    from app import site
+    from app.config import Settings
+    from app.desktop import certificates
+    from tempfile import TemporaryDirectory
+    created = []
+    actual = TemporaryDirectory
+
+    def temp_dir(*args, **kwargs):
+        temporary = actual(*args, dir=tmp_path, **kwargs)
+        created.append(temporary.name)
+        return temporary
+
+    async def cancelled(*args, **kwargs):
+        raise asyncio.CancelledError()
+
+    monkeypatch.setattr('tempfile.TemporaryDirectory', temp_dir)
+    monkeypatch.setattr(certificates, 'prepare_intermediate_cache', lambda *args: 0)
+    monkeypatch.setattr(camoufox.async_api, 'AsyncNewBrowser', cancelled)
+    monkeypatch.setattr('camoufox.pkgman.launch_path', lambda: '/tmp/synthetic-camoufox')
+    task = SimpleNamespace(id='offline', schedule=SimpleNamespace(timezone='Europe/Madrid'))
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(site.IcpPlusChecker(Settings(browser_session='fresh'))._launch_camoufox(None, task, headless=True))
+    assert created and all(not __import__('pathlib').Path(path).exists() for path in created)
+
+
+def test_fresh_camoufox_profile_cleaned_when_context_close_raises(monkeypatch, tmp_path):
+    import asyncio
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    import camoufox.async_api
+    from app import site
+    from app.config import Settings
+    from app.desktop import certificates
+
+    instance = SimpleNamespace(
+        on=lambda *args: None,
+        browser=None,
+        close=AsyncMock(side_effect=RuntimeError('browser already closed')),
+    )
+    launch = AsyncMock(return_value=instance)
+    monkeypatch.setattr(certificates, 'prepare_intermediate_cache', lambda *args: 0)
+    monkeypatch.setattr(camoufox.async_api, 'AsyncNewBrowser', launch)
+    monkeypatch.setattr('camoufox.pkgman.launch_path', lambda: '/tmp/synthetic-camoufox')
+    task = SimpleNamespace(id='offline', schedule=SimpleNamespace(timezone='Europe/Madrid'))
+    checker = site.IcpPlusChecker(Settings(browser_session='fresh'))
+    asyncio.run(checker._launch_camoufox(None, task, headless=True))
+    transient = instance._cita_temporary_profile
+    transient_path = __import__('pathlib').Path(transient.name)
+    assert transient_path.exists()
+    asyncio.run(checker.close_context(instance))
+    assert not transient_path.exists()
+    assert instance._cita_temporary_profile is None
+
+
+def test_fresh_camoufox_launch_path_failure_cleans_temp_profile(monkeypatch, tmp_path):
+    import asyncio
+    from types import SimpleNamespace
+    import camoufox.pkgman
+    from app import site
+    from app.config import Settings
+    from app.desktop import certificates
+    from tempfile import TemporaryDirectory
+    paths = []
+    actual = TemporaryDirectory
+
+    def temp_dir(*args, **kwargs):
+        profile = actual(*args, dir=tmp_path, **kwargs)
+        paths.append(profile.name)
+        return profile
+
+    def broken():
+        raise RuntimeError('Camoufox unavailable')
+    monkeypatch.setattr('tempfile.TemporaryDirectory', temp_dir)
+    monkeypatch.setattr(camoufox.pkgman, 'launch_path', broken)
+    task = SimpleNamespace(id='offline', schedule=SimpleNamespace(timezone='Europe/Madrid'))
+    with pytest.raises(RuntimeError, match='Camoufox unavailable'):
+        asyncio.run(site.IcpPlusChecker(Settings(browser_session='fresh'))._launch_camoufox(None, task, headless=True))
+    assert paths and all(not __import__('pathlib').Path(path).exists() for path in paths)

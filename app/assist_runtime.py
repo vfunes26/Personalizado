@@ -242,7 +242,10 @@ async def _run_session(task, settings, control, *, max_cycles=None, network_jour
         if trace:
             await trace.stop()
         await alerter.stop()
-        if context:
-            await checker.close_context(context)
-        if playwright:
-            await playwright.stop()
+        try:
+            if context:
+                await checker.close_context(context)
+        finally:
+            # Even when a driver/context is already dead, release Playwright.
+            if playwright:
+                await playwright.stop()

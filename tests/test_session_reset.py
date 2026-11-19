@@ -121,3 +121,48 @@ def test_reset_refuses_windows_exclusive_parent_lock(tmp_path):
     finally:
         api.CloseHandle(handle)
     assert site.reset_browser_profile(settings, 'test')
+
+
+@pytest.mark.parametrize('task_id', ['../other', 'child/other', '', 'UPPER'])
+def test_browser_profile_rejects_invalid_task_ids_without_creating_folders(tmp_path, task_id):
+    settings = Settings(browser_profile_directory=str(tmp_path), browser_engine='camoufox')
+    with pytest.raises(site.SiteCheckError, match='BROWSER_PROFILE_RESET_FAILED'):
+        site.browser_profile_path(settings, task_id)
+    with pytest.raises(site.SiteCheckError, match='BROWSER_PROFILE_RESET_FAILED'):
+        site.reset_browser_profile(settings, task_id)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_browser_profile_rejects_symlinked_parent_without_touching_target(tmp_path):
+    settings = Settings(browser_profile_directory=str(tmp_path/'profiles'),
+                        browser_engine='camoufox')
+    root = tmp_path/'profiles'
+    root.mkdir()
+    outside = tmp_path/'outside'
+    outside.mkdir()
+    (outside/'keep').write_text('private')
+    try:
+        (root/'camoufox').symlink_to(outside, target_is_directory=True)
+    except (OSError, NotImplementedError) as exc:
+        pytest.skip('El sistema no permite symlinks: ' + type(exc).__name__)
+    with pytest.raises(site.SiteCheckError, match='BROWSER_PROFILE_RESET_FAILED'):
+        site.browser_profile_path(settings, 'client')
+    with pytest.raises(site.SiteCheckError, match='BROWSER_PROFILE_RESET_FAILED'):
+        site.reset_browser_profile(settings, 'client')
+    assert (outside/'keep').read_text() == 'private'
+    assert not (outside/'client').exists()
+
+
+def test_browser_profile_rejects_redirected_existing_profile(tmp_path):
+    settings = Settings(browser_profile_directory=str(tmp_path), browser_engine='camoufox')
+    first = site.browser_profile_path(settings, 'client')
+    first.rmdir()
+    outside = tmp_path/'outside'
+    outside.mkdir()
+    try:
+        first.symlink_to(outside, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip('Symlinks no disponibles en este sistema')
+    with pytest.raises(site.SiteCheckError, match='BROWSER_PROFILE_RESET_FAILED'):
+        site.browser_profile_path(settings, 'client')
+    assert first.is_symlink() and outside.is_dir()
