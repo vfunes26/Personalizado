@@ -1679,3 +1679,27 @@ def test_edit_profile_roundtrip_keeps_selected_office_and_contact(window, task_m
     assert f['email'].text()=='nuevo@example.com'
     assert f['office'].currentData()=='CNP Alicante TIE, Campo de Mirra, 6, Alicante'
     window.profile_editor.close()
+
+
+
+def test_proxy_connection_button_uses_normalized_input_without_saving(window, monkeypatch):
+    from app.desktop import proxy_check
+    seen = []
+
+    def probe(server, username, password):
+        seen.append((server, username, password))
+        return True, 'Túnel validado'
+
+    monkeypatch.setattr(proxy_check, 'check_proxy', probe)
+    class Immediate:
+        def submit(self, work, callback):
+            callback(True, work())
+
+    window.proxy_test_jobs = Immediate()
+    window.proxy_server_input.setText('127.0.0.1:8080:usuario:secreto')
+    window.proxy_username_input.clear()
+    window.proxy_password_input.clear()
+    window.proxy_test_button.click()
+    assert seen == [('http://127.0.0.1:8080', 'usuario', 'secreto')]
+    assert 'Conexión válida' in window.proxy_status.text()
+    assert window.proxy_test_button.isEnabled()

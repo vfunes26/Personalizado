@@ -93,9 +93,9 @@ def test_http_proxy_rejects_invalid_portal_certificate(monkeypatch):
     server, port = serve(tunnel)
     try:
         ok, detail = check_proxy(f'http://127.0.0.1:{port}')
-        assert ok  # CONNECT se estableció: la inspección final corresponde al navegador
-        assert 'no verificado' in detail
-        assert 'Camoufox' in detail
+        assert not ok  # CONNECT no garantiza identidad HTTPS del portal.
+        assert 'no es confiable' in detail
+        assert 'No se iniciará' in detail
         assert 'synthetic' not in detail
     finally:
         server.close()
@@ -139,3 +139,43 @@ def test_https_proxy_tls_failure_does_not_downgrade_to_plain_http(monkeypatch):
         assert 'No se cambió' in message
     finally:
         server.close()
+
+
+
+def test_socks5_authentication_never_offers_anonymous_fallback():
+    class FakeSocket:
+        def __init__(self, replies):
+            self.replies = list(replies)
+            self.sent = []
+
+        def sendall(self, data):
+            self.sent.append(data)
+
+        def recv(self, size):
+            result = self.replies.pop(0)
+            assert len(result) <= size
+            return result
+
+    connected = FakeSocket([
+        b'\x05\x02', b'\x01\x00', b'\x05\x00\x00\x01',
+        b'\x7f\x00\x00\x01', b'\x01\xbb',
+    ])
+    ok, detail = _socks5(connected, 'usuario', 'secreto')
+    assert ok, detail
+    assert connected.sent[0] == b'\x05\x01\x02'
+    assert connected.sent[1] == b'\x01\x07usuario\x07secreto'
+
+    downgraded = FakeSocket([b'\x05\x00'])
+    ok, detail = _socks5(downgraded, 'usuario', 'secreto')
+    assert not ok and 'no autorizado' in detail
+    assert downgraded.sent == [b'\x05\x01\x02']
+
+
+def test_proxy_checker_rejects_unknown_scheme_and_bad_credentials_without_network(monkeypatch):
+    def forbidden(*args, **kwargs):
+        raise AssertionError('No se debe abrir la conexión')
+
+    monkeypatch.setattr(socket, 'create_connection', forbidden)
+    assert not check_proxy('ftp://127.0.0.1:8080')[0]
+    assert not check_proxy('http://127.0.0.1:8080', 'bad\r\nHeader: x', 'secret')[0]
+    assert not check_proxy('http://127.0.0.1:8080', 'usuario', '')[0]

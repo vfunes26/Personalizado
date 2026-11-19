@@ -96,3 +96,24 @@ def test_deleting_proxy_removes_its_assignments(tmp_path):
 
     assert store.assignment_for('request_a')['proxy_profile_id'] is None
     assert store.proxy_for_request('request_a') is None
+
+
+@pytest.mark.parametrize('username,password', [
+    ('usuario', ''),
+    ('bad\r\nProxy-Authorization: x', 'pass'),
+    ('usuario', 'bad\npassword'),
+    ('user:name', 'password'),
+])
+def test_invalid_proxy_auth_never_reaches_native_vault(tmp_path, username, password):
+    store = ProxyProfileStore(tmp_path/'proxies.json')
+    with pytest.raises(ProxyProfileError):
+        store.save_proxy_profile(None, dict(
+            label='Rechazar', server='http://127.0.0.1:8080',
+            username=username, password=password))
+    assert not (tmp_path/'proxies.json').exists()
+
+
+def test_proxy_endpoint_rejects_empty_embedded_credentials_and_port_zero():
+    for server in ['http://@127.0.0.1:8080', 'http://localhost:0']:
+        with pytest.raises(ProxyProfileError):
+            ProxyProfileStore.validate_endpoint(server)

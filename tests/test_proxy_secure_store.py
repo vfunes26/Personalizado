@@ -150,3 +150,34 @@ def test_unauthenticated_proxy_does_not_need_keyring(tmp_path):
     assert store.load()["proxy_profiles"][0]["id"] == key
     assert "username" not in raw_record(path)
     assert "password" not in raw_record(path)
+
+
+
+def test_missing_win_vault_secret_cannot_be_silently_removed_by_edit(tmp_path):
+    backend = FakeKeyring()
+    path = tmp_path / 'proxy-profiles.json'
+    store = store_at(path, backend)
+    proxy_id = store.save_proxy_profile(None, profile())
+    before = path.read_bytes()
+    backend.secrets.clear()
+    with pytest.raises(ProxyProfileError, match='credenciales'):
+        store.save_proxy_profile(proxy_id, {
+            'label': 'Cambio de nombre', 'server': 'http://127.0.0.1:8080',
+            'username': '', 'password': '',
+        })
+    assert path.read_bytes() == before
+    assert raw_record(path)['secret_ref']
+
+
+def test_windows_selects_native_winvault_keyring(monkeypatch):
+    import sys
+    from types import ModuleType
+
+    windows_backend = ModuleType('keyring.backends.Windows')
+    windows_backend.WinVaultKeyring = FakeKeyring
+    monkeypatch.setitem(sys.modules, 'keyring.backends.Windows', windows_backend)
+    monkeypatch.setattr('app.desktop.notification_store.sys.platform', 'win32')
+    vault = ProxyCredentialVault()
+    reference = vault.put({'username': 'usuario', 'password': 'secreto'})
+    assert isinstance(vault.backend(), FakeKeyring)
+    assert vault.get(reference) == {'username': 'usuario', 'password': 'secreto'}
