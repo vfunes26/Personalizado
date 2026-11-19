@@ -68,8 +68,12 @@ def test_helper_verifies_new_build_before_safely_replacing_old_one():
         "Move-Item -LiteralPath $ready -Destination $respaldo")
     assert control.index('Get-FileHash -Algorithm SHA256') < control.index(
         "Move-Item -LiteralPath $ready -Destination $respaldo")
-    assert "robocopy.exe $oldData" in control
-    assert "/XJ" in control
+    assert "EjecutarPython $python @($migration, $oldData, (Join-Path $candidate 'data'), '--copy')" in control
+    verifier = (ROOT / 'scripts/verify_private_migration.py').read_text(encoding='utf-8')
+    assert "'robocopy.exe', str(source), str(candidate)" in verifier
+    assert "'/XJ'" in verifier
+    assert 'before != after' in verifier
+    assert 'copied != before' in verifier
     assert "[IO.FileAttributes]::ReparsePoint" in control
     assert "Get-ChildItem -LiteralPath $data -Force" in control
     assert "Cita Extranjeria Helper - Personalizado" in control
