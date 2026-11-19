@@ -243,3 +243,30 @@ def test_codeql_scans_prs_main_changes_and_weekly_without_being_mandatory():
     analyze = next(step for step in job['steps'] if step.get('name') == 'Analyze')
     assert analyze['with']['upload'] == 'always'
     # CodeQL is advisory in this stage; Tests remains the only required check.
+
+def test_pull_request_template_records_authorization_tests_windows_and_risks():
+    template = (Path(__file__).parents[1] / '.github/PULL_REQUEST_TEMPLATE.md').read_text(
+        encoding='utf-8'
+    )
+    for heading in (
+        '## Objetivo y autorización',
+        '## Archivos y cambios',
+        '## Pruebas automáticas',
+        '## Comprobación en Windows y compatibilidad',
+        '## Seguridad, riesgos y recuperación',
+        '## Resultado y cierre',
+    ):
+        assert heading in template
+    for requirement in (
+        'Aprobación y alcance autorizado:',
+        'Archivos modificados:',
+        '`Tests` aprobado en este PR',
+        '`CodeQL` revisado cuando corresponda',
+        'Comprobación en Windows pendiente',
+        'Datos y configuraciones que deben conservarse:',
+        'Procedimiento de reversión:',
+        'Confirmación para fusionar el PR:',
+        'contraseñas, tokens, sesiones, datos privados',
+        'CAPTCHA',
+    ):
+        assert requirement in template
