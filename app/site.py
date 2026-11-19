@@ -235,6 +235,10 @@ def _camoufox_proxy_options(task_id: str) -> dict:
 
 
 def _browser_profile_location(settings: Settings, task_id: str) -> Path:
+    # Keep sessions inside their own task folder even when called outside
+    # the normal validated task loader.
+    if not isinstance(task_id, str) or not re.fullmatch(r"[a-z0-9_-]+", task_id):
+        raise SiteCheckError("BROWSER_PROFILE_RESET_FAILED", detail="profile.id")
     root = Path(settings.browser_profile_directory)
     if not root.is_absolute():
         root = PROJECT_ROOT / root
@@ -244,7 +248,13 @@ def _browser_profile_location(settings: Settings, task_id: str) -> Path:
 def browser_profile_path(settings: Settings, task_id: str) -> Path:
     profile = _browser_profile_location(settings, task_id)
     root = profile.parent.parent
-    profile.mkdir(parents=True, exist_ok=True, mode=0o700)
+    from .locking import ensure_private_path
+    try:
+        ensure_private_path(profile)
+        profile.mkdir(parents=True, exist_ok=True, mode=0o700)
+        ensure_private_path(profile)
+    except OSError as exc:
+        raise SiteCheckError("BROWSER_PROFILE_RESET_FAILED", detail="profile.path") from exc
     try:
         root.chmod(0o700)
         profile.parent.chmod(0o700)
@@ -260,8 +270,11 @@ def reset_browser_profile(settings: Settings, task_id: str) -> bool:
     from .locking import lock_handle, unlock_handle
 
     profile = _browser_profile_location(settings, task_id)
-    if profile.is_symlink():
-        raise SiteCheckError("BROWSER_PROFILE_RESET_FAILED", detail="profile.symlink")
+    from .locking import ensure_private_path
+    try:
+        ensure_private_path(profile)
+    except OSError as exc:
+        raise SiteCheckError("BROWSER_PROFILE_RESET_FAILED", detail="profile.path") from exc
     if not profile.exists():
         return False
     with ExitStack() as locks:
@@ -480,8 +493,8 @@ class IcpPlusChecker:
         else:
             temporary_profile = TemporaryDirectory(prefix='cita-browser-')
             profile = Path(temporary_profile.name)
-        executable = packaged_browser or Path(launch_path())
         try:
+            executable = packaged_browser or Path(launch_path())
             try:
                 imported = await asyncio.to_thread(
                     prepare_intermediate_cache, profile, executable,
@@ -505,12 +518,22 @@ class IcpPlusChecker:
                 log_event(log, logging.WARNING, 'camoufox_screen_constraints_relaxed')
                 fingerprint = generate_fingerprint(os=options['os'])
                 context = await AsyncNewBrowser(playwright, **options, fingerprint=fingerprint)
-        except Exception:
+        except BaseException:
+            # asyncio.CancelledError is not Exception: stopping a worker while
+            # Camoufox launches must still discard its fresh temporary profile.
             if temporary_profile:
                 temporary_profile.cleanup()
             raise
         if temporary_profile:
-            context.on('close', lambda _: temporary_profile.cleanup())
+            try:
+                context._cita_temporary_profile = temporary_profile
+                context.on('close', lambda _: temporary_profile.cleanup())
+            except BaseException:
+                try:
+                    await self.close_context(context)
+                finally:
+                    temporary_profile.cleanup()
+                raise
         log_event(
             log,
             logging.INFO,
@@ -536,15 +559,21 @@ class IcpPlusChecker:
         except Exception:
             browser = None
         try:
-            await context.close()
-        except Exception:
-            log_event(log, logging.DEBUG, "browser_context_already_closed")
-        if browser is not None:
             try:
-                if browser.is_connected():
-                    await browser.close()
+                await context.close()
             except Exception:
-                log_event(log, logging.DEBUG, "browser_process_already_closed")
+                log_event(log, logging.DEBUG, "browser_context_already_closed")
+            if browser is not None:
+                try:
+                    if browser.is_connected():
+                        await browser.close()
+                except Exception:
+                    log_event(log, logging.DEBUG, "browser_process_already_closed")
+        finally:
+            temporary_profile = getattr(context, '_cita_temporary_profile', None)
+            if temporary_profile is not None:
+                temporary_profile.cleanup()
+                context._cita_temporary_profile = None
 
 
 
