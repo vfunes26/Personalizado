@@ -22,24 +22,10 @@ on:
       - 'CHANGELOG.md'
       - 'LICENSE'
       - 'docs/**'
+  # Ejecutar Tests en TODOS los PR hacia main, sin filtrar rutas.
+  # ci_scope.py mantiene la validacion ligera de documentacion.
   pull_request:
     branches: [main]
-    paths:
-      - 'app/**'
-      - 'scripts/**'
-      - 'tests/**'
-      - 'catalogs/**'
-      - '.github/workflows/**'
-      - '.github/release-version'
-      - '.github/validation-milestone.txt'
-      - 'pyproject.toml'
-      - 'uv.lock'
-      - 'CompilarPortable.bat'
-      - 'LimpiarPortable.bat'
-      - 'README*.md'
-      - 'CHANGELOG.md'
-      - 'LICENSE'
-      - 'docs/**'
 
 permissions:
   contents: read
