@@ -40,8 +40,17 @@ def unlock_handle(handle, *, posix_record=False):
         (fcntl.lockf if posix_record else fcntl.flock)(handle.fileno(), fcntl.LOCK_UN)
 
 
+def ensure_private_path(path: Path):
+    """Reject symlink/junction redirection of private files and parent folders."""
+    path = Path(path)
+    for part in (path, *path.parents):
+        if part.is_symlink() or getattr(part, 'is_junction', lambda: False)():
+            raise OSError('La ruta privada es un enlace o unión de directorios.')
+
+
 @contextmanager
 def locked_file(path: Path, *, blocking=True):
+    ensure_private_path(path)
     fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o600)
     with os.fdopen(fd, 'r+b') as handle:
         lock_handle(handle, blocking=blocking)

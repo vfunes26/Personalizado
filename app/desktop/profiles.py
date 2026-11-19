@@ -30,7 +30,15 @@ class ProfileStore:
     def __init__(self, path: Path, catalog_path: Path):
         self.path, self.catalog_path = Path(path), Path(catalog_path)
 
+    def _check_private_path(self):
+        from ..locking import ensure_private_path
+        try:
+            ensure_private_path(self.path)
+        except OSError:
+            raise ProfileValidationError('La ruta de perfiles está enlazada. Datos privados protegidos.') from None
+
     def revision(self):
+        self._check_private_path()
         try:
             data = self.path.read_bytes()
         except FileNotFoundError:
@@ -38,6 +46,7 @@ class ProfileStore:
         return hashlib.sha256(data).hexdigest()
 
     def _read(self):
+        self._check_private_path()
         try:
             raw = yaml.safe_load(self.path.read_text(encoding='utf-8')) if self.path.exists() else {}
             raw = raw or {}
@@ -104,10 +113,13 @@ class ProfileStore:
         return copy.deepcopy(next(t for t in self._read().get('tasks', []) if t.get('id') == profile_id))
 
     def _write(self, raw, revision):
+        self._check_private_path()
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._check_private_path()
         # Serialize cooperating editors, then compare content before replace.
         from ..locking import locked_file
         with locked_file(self.path.with_name('.' + self.path.name + '.lock')):
+            self._check_private_path()
             if self.revision() != revision:
                 raise ProfileConflictError('Файл изменён извне. Перед сохранением открыть настройки заново.')
             fd, temp = tempfile.mkstemp(prefix='.profiles-', dir=self.path.parent)

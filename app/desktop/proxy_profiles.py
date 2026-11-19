@@ -60,6 +60,13 @@ class ProxyProfileStore:
         self.path = Path(path)
         self.vault = vault if vault is not None else ProxyCredentialVault()
 
+    def _check_private_path(self):
+        from ..locking import ensure_private_path
+        try:
+            ensure_private_path(self.path)
+        except OSError:
+            raise ProxyProfileError('La ruta de proxies está enlazada. Datos privados protegidos.') from None
+
     @staticmethod
     def _empty():
         return {
@@ -68,6 +75,7 @@ class ProxyProfileStore:
         }
 
     def _read(self):
+        self._check_private_path()
         if not self.path.exists():
             return self._empty()
 
@@ -242,7 +250,9 @@ class ProxyProfileStore:
 
         from ..locking import locked_file
 
+        self._check_private_path()
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._check_private_path()
 
         with locked_file(self.path.with_name("." + self.path.name + ".lock")):
             raw = self._read()
@@ -291,7 +301,9 @@ class ProxyProfileStore:
     def delete_proxy_profile(self, profile_id):
         from ..locking import locked_file
 
+        self._check_private_path()
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._check_private_path()
 
         with locked_file(self.path.with_name("." + self.path.name + ".lock")):
             raw = self._read()
@@ -328,7 +340,9 @@ class ProxyProfileStore:
 
         from ..locking import locked_file
 
+        self._check_private_path()
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._check_private_path()
 
         with locked_file(self.path.with_name("." + self.path.name + ".lock")):
             raw = self._read()
@@ -396,6 +410,7 @@ class ProxyProfileStore:
         return copy.deepcopy(selected)
 
     def _write(self, raw):
+        self._check_private_path()
         if any("username" in item or "password" in item
                for item in raw["proxy_profiles"]):
             raise ProxyProfileError("No se permite escribir credenciales proxy en JSON.")
