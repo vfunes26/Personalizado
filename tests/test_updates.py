@@ -247,3 +247,79 @@ def test_delta_update_never_trusts_assets_from_old_repository():
          'browser_download_url':base+patch+'.sigstore.json','size':200},
     ]
     assert select_release(data,'0.1.0','windows','x64',portable=True).delta is None
+
+
+
+def test_one_click_delta_checks_and_downloads_only_signed_patch(tmp_path, qt_app, monkeypatch):
+    import threading
+    from types import SimpleNamespace
+    from app.desktop import updates
+
+    service = updates.UpdateService(tmp_path, '0.1.0')
+    monkeypatch.setattr('app.desktop.paths.portable_mode', lambda: True)
+    monkeypatch.setattr(updates, 'release_target', lambda: ('windows', 'x64'))
+
+    class Response:
+        def __enter__(self):
+            return self
+        def __exit__(self, *_args):
+            return False
+        def read(self, _limit):
+            return b'{}'
+
+    monkeypatch.setattr(updates, 'fetch', lambda url: Response())
+    patch = SimpleNamespace(name='signed.delta.zip')
+    release = SimpleNamespace(version='0.2.0', delta=patch)
+    monkeypatch.setattr(updates, 'select_release', lambda *args, **kwargs: release)
+    calls = []
+    target = tmp_path/'signed.delta.zip'
+
+    def download(item, dest, cancel, **kwargs):
+        calls.append(item.name)
+        return target
+
+    monkeypatch.setattr(updates, 'download_release', download)
+    monkeypatch.setattr(updates, 'check_delta_base', lambda *args: calls.append('base-verified'))
+    queued = []
+    monkeypatch.setattr(service, '_start', lambda work, signal: queued.append(work) or True)
+    assert service.check_and_download_delta()
+    job = SimpleNamespace(cancelled=threading.Event(), progress=SimpleNamespace(emit=lambda _: None))
+    assert queued.pop()(job) == target
+    assert calls == ['signed.delta.zip', 'base-verified']
+
+    monkeypatch.setattr(updates, 'select_release', lambda *args, **kwargs: SimpleNamespace(delta=None))
+    assert service.check_and_download_delta()
+    with pytest.raises(updates.DeltaUnavailable):
+        queued.pop()(job)
+    assert calls == ['signed.delta.zip', 'base-verified']
+
+
+def test_one_click_delta_rejects_incompatible_base_without_full_download(tmp_path, qt_app, monkeypatch):
+    import threading
+    from types import SimpleNamespace
+    from app.desktop import updates
+
+    service = updates.UpdateService(tmp_path, '0.1.0')
+    monkeypatch.setattr('app.desktop.paths.portable_mode', lambda: True)
+    monkeypatch.setattr(updates, 'release_target', lambda: ('windows', 'x64'))
+    class Response:
+        def __enter__(self): return self
+        def __exit__(self, *_args): return False
+        def read(self, _max): return b'{}'
+    monkeypatch.setattr(updates, 'fetch', lambda url: Response())
+    patch = SimpleNamespace(name='signed.delta.zip')
+    monkeypatch.setattr(updates, 'select_release', lambda *a, **k:
+                        SimpleNamespace(version='0.2.0', delta=patch))
+    called = []
+    monkeypatch.setattr(updates, 'download_release', lambda item, *a, **k:
+                        called.append(item.name) or tmp_path/'signed.delta.zip')
+    def reject(*args):
+        raise updates.DeltaIncompatible('Source altered')
+    monkeypatch.setattr(updates, 'check_delta_base', reject)
+    queued = []
+    monkeypatch.setattr(service, '_start', lambda work, signal: queued.append(work) or True)
+    assert service.check_and_download_delta()
+    job = SimpleNamespace(cancelled=threading.Event(), progress=SimpleNamespace(emit=lambda _:None))
+    with pytest.raises(updates.DeltaIncompatible):
+        queued.pop()(job)
+    assert called == ['signed.delta.zip']
