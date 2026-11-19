@@ -399,7 +399,12 @@ def test_telegram_office_catalog_is_paged_without_truncation():
         store,vault,client,inbox,_=setup(d)
         assert inbox.prepare()
         assert inbox.handle_message(message(1,'/oficinas 28')['message'])
-        assert len(client.sent)>=2
-        assert all(len(msg)<=3900 for _chat,msg in client.sent)
         assert 'Oficinas de Madrid' in client.sent[0][1]
         assert all(chat==str(ALLOWED) for chat,_msg in client.sent)
+        client.sent.clear()
+        long_catalog = '\n'.join(f'{i}. Oficina de prueba' for i in range(400))
+        assert len(long_catalog) > 3900
+        inbox._reply(str(ALLOWED), long_catalog)
+        assert len(client.sent)>=2
+        assert all(len(msg)<=3900 for _chat,msg in client.sent)
+        assert ''.join(msg for _chat,msg in client.sent) == long_catalog
