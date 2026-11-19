@@ -272,12 +272,6 @@ class TelegramInbox:
         target = tasks[index - 1]
         if self.source and target.id == self.source.profile_id:
             return self._reply(chat_id, 'No se puede borrar el perfil que mantiene conectado este bot.')
-        try:
-            mail = self.deletion_service.mail.read()
-            if not mail.get('secret_ref') or not mail.get('recipients'):
-                return self._reply(chat_id, 'Configura Gmail en la aplicación antes de eliminar perfiles.')
-        except NotificationError:
-            return self._reply(chat_id, 'Configura Gmail en la aplicación antes de eliminar perfiles.')
         token = secrets.token_hex(8)
         self.pending_deletions[chat_id] = {
             'token': token, 'profile_id': target.id, 'revision': revision,
@@ -373,7 +367,7 @@ class TelegramInbox:
                     self._reply(chat_id, f'ℹ Ya existe un perfil con ese documento, trámite, provincia y acceso: «{duplicate}». No se creó otro.')
                 return True
             profile_id = self._create(result.fields, chat_id=chat_id)
-            self._notify_owner(chat_id, '✅ Nuevo perfil creado por ID autorizado: «' + result.fields.get('label', '') + '».')
+            self._notify_owner(chat_id, '✅ Nuevo perfil creado por ID autorizado:\n\n' + result.full_summary)
             extra = ('\n\n' + '\n'.join('ℹ ' + w for w in result.warnings)) if result.warnings else ''
             self._reply(chat_id, '✅ Perfil creado\n\n' + (result.full_summary or result.summary) + extra
                         + '\n\nYa aparece en la app. Inicie la búsqueda desde allí (Seguimiento → Iniciar).')

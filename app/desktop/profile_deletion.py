@@ -145,9 +145,6 @@ class ProfileDeletionService:
         if not profile_id or profile_id == protected_profile_id:
             raise ProfileDeletionError('No se puede eliminar el perfil que mantiene conectado el bot.')
         try:
-            config = self.mail.read()
-            if not config.get('secret_ref') or not config.get('recipients'):
-                raise ProfileDeletionError('Configura Gmail y sus destinatarios antes de eliminar perfiles.')
             if self.busy_checker(profile_id):
                 raise ProfileDeletionError('El perfil está iniciando o ejecutándose. Deténlo primero.')
             with StateStore(self.root / 'data' / 'state.db').task_lock(profile_id) as acquired:
@@ -178,6 +175,9 @@ class ProfileDeletionService:
                    + profile_receipt(deleted, profile_id)
                    + '\n\nEl perfil fue eliminado de la lista de la aplicación.')
         try:
+            mail_config = self.mail.read()
+            if not mail_config.get('secret_ref') or not mail_config.get('recipients'):
+                raise GmailError('Gmail sin configurar')
             self.mail.send(subject, message)
         except (GmailError, NotificationError, OSError):
             try:
