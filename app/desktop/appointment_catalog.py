@@ -46,7 +46,7 @@ class AppointmentCatalog:
         seen = set()
         for procedure in self.provinces.get(province, {}).get("procedures", []):
             if office and not any(
-                (str(item["id"]), item["name"]) == office
+                ((str(item["id"]), item["name"]) == office or item["name"] == office)
                 for item in procedure.get("offices", [])
             ):
                 continue
