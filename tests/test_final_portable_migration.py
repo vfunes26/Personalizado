@@ -207,6 +207,24 @@ def test_inventory_fails_closed_if_private_directory_cannot_be_read(tmp_path, mo
         verify_migration(old, old)
 
 
+@pytest.mark.parametrize('path, expected', [
+    ('C:\\CitaHelper\\data', '\\\\?\\C:\\CitaHelper\\data'),
+    ('\\\\server\\share\\profiles', '\\\\?\\UNC\\server\\share\\profiles'),
+    ('\\\\?\\C:\\CitaHelper\\data', '\\\\?\\C:\\CitaHelper\\data'),
+])
+def test_windows_long_path_prefix_for_deep_firefox_profiles(path, expected):
+    from scripts.verify_private_migration import _windows_long_path
+
+    class SyntheticWindowsPath:
+        def absolute(self):
+            return self
+
+        def __str__(self):
+            return path
+
+    assert _windows_long_path(SyntheticWindowsPath()) == expected
+
+
 def test_migration_refuses_links_to_external_private_data(tmp_path):
     old = tmp_path / 'old'
     new = tmp_path / 'new'
