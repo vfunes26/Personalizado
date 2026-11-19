@@ -691,7 +691,6 @@ class DesktopWindow(QMainWindow):
             'Solo Windows portable: descarga un diferencial firmado y conserva la versión anterior.')
         self.manual_delta_button.clicked.connect(self.download_safe_delta)
         update_row.addWidget(self.manual_delta_button)
-        self.delta_download_requested=False
         self.manual_update_status=label('Consulta GitHub Releases cuando quieras; instalar requiere confirmación.',muted=True)
         update_row.addWidget(self.manual_update_status,1)
         layout.addLayout(update_row)
@@ -2254,18 +2253,10 @@ class DesktopWindow(QMainWindow):
             self.update_message='Проверяем обновления…';self.render_updates()
 
     def download_safe_delta(self):
-        from .paths import portable_mode
-        if not portable_mode() or self.update_service.busy:
-            return
-        self.delta_download_requested=True
-        if not self.update_service.check():
-            self.delta_download_requested=False
-            return
-        self.manual_update_status.setText('Comprobando versión y firma del diferencial…')
+        if self.update_service.check_and_download_delta():
+            self.manual_update_status.setText('Comprobando y descargando diferencial firmado…')
 
     def update_checked(self, release):
-        want_delta=self.delta_download_requested
-        self.delta_download_requested=False
         if hasattr(self, 'manual_update_status'):
             self.manual_update_status.setText(('Versión nueva: '+release.version) if release else 'No hay una versión nueva publicada.')
         if self.update_path and (release is None or self.update_path.name!=release.name):
@@ -2278,13 +2269,6 @@ class DesktopWindow(QMainWindow):
         )
         if release:
             self.footer.setText(self.t('Доступна новая версия')+': '+release.version+' — '+self.t('О приложении'))
-        if want_delta:
-            if not release or not getattr(release, 'delta', None):
-                self.manual_update_status.setText('No hay diferencial firmado para esta versión portable.')
-            elif self.update_service.download_delta(release):
-                self.manual_update_status.setText('Descargando diferencial firmado; sin modificar el portable actual.')
-            else:
-                self.manual_update_status.setText('No se pudo iniciar la descarga diferencial.')
         self.render_updates()
 
     def update_downloaded(self,path):
@@ -2296,13 +2280,17 @@ class DesktopWindow(QMainWindow):
         self.render_updates()
 
     def update_failed(self,reason):
-        self.delta_download_requested=False
         if hasattr(self,'manual_update_status'):
-            self.manual_update_status.setText('Error al comprobar actualizaciones; vuelve a intentarlo.')
+            self.manual_update_status.setText({
+                'no_delta':'No hay diferencial firmado compatible; no se descargó una versión completa.',
+                'delta_incompatible':'El portable original no coincide; no se modificó ningún archivo.',
+            }.get(reason, 'Error al comprobar actualizaciones; vuelve a intentarlo.'))
         self.update_install_requested=False
         if reason=='provenance':self.update_path=None
         self.update_message={'provenance':'Не удалось подтвердить происхождение обновления. Установка заблокирована.',
                              'no_release':'Релиз ещё не опубликован',
+                             'no_delta':'No existe un diferencial firmado compatible con este portable.',
+                             'delta_incompatible':'La versión portable no coincide con los archivos firmados. No se aplicaron cambios.',
                              'cancelled':'Descarga pausada. Puedes pulsar Descargar para continuar.',
                              'network_download':'Conexión interrumpida. Datos guardados; pulsa Descargar para continuar.',
                              'network':'Не удалось проверить обновления. Повторить попытку позже.'}.get(reason,'Не удалось проверить или скачать обновление. Повторить попытку позже.')

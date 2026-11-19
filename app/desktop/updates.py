@@ -189,6 +189,10 @@ def verify_download(path):
     return path
 
 
+class DeltaUnavailable(ValueError):
+    """No signed differential is available for this particular portable version."""
+
+
 class UpdateJob(QThread):
     result=Signal(object)
     failed=Signal(str)
@@ -198,6 +202,8 @@ class UpdateJob(QThread):
     def run(self):
         try:self.result.emit(self.operation(self))
         except InterruptedError:self.failed.emit('cancelled')
+        except DeltaUnavailable:self.failed.emit('no_delta')
+        except DeltaIncompatible:self.failed.emit('delta_incompatible')
         except AttestationError:self.failed.emit('provenance')
         except DownloadNetworkError:self.failed.emit('network_download')
         except HTTPError as exc:self.failed.emit('no_release' if exc.code==404 else 'network')
@@ -256,12 +262,23 @@ class UpdateService(QObject):
             return download_release(
                 release, self.directory, job.cancelled, progress=job.progress.emit)
         return self._start(operation,self.downloaded)
-    def download_delta(self, release):
-        """Explicit differential-only download; never substitute a full package."""
+    def check_and_download_delta(self):
+        """One-click signed differential: check, download and verify in one job.
+
+        The current portable is never overwritten; no full ZIP fallback is used.
+        """
         from .paths import portable_mode
-        if not portable_mode() or release is None or release.delta is None:
+        if not portable_mode():
             return False
         def operation(job):
+            with fetch(API) as response:
+                data = response.read(1024 * 1024 + 1)
+            if len(data) > 1024 * 1024:
+                raise ValueError('Release response too large')
+            release = select_release(
+                json.loads(data), self.current, *release_target(), portable=True)
+            if release is None or release.delta is None:
+                raise DeltaUnavailable('No compatible signed differential')
             patched = download_release(
                 release.delta, self.directory, job.cancelled, progress=job.progress.emit)
             check_delta_base(Path(sys.executable).parent, patched,
