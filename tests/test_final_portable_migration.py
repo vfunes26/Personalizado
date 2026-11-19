@@ -8,7 +8,7 @@ import pytest
 import yaml
 
 from app.desktop.private_backup import BackupError, export_backup, restore_backup
-from scripts.verify_private_migration import MigrationError, verify_migration
+from scripts.verify_private_migration import MigrationError, verify_migration, copy_migration
 
 
 PASSWORD = 'Respaldo seguro 16 ajustes'
@@ -120,20 +120,91 @@ def test_recompiled_portable_data_is_byte_identical(tmp_path):
     assert (old / 'tasks.yml').read_bytes() == 'nombre: Á.B.\n'.encode('utf-8')
 
 
-def test_migration_refuses_live_sqlite_wal_and_unknown_extra_file(tmp_path):
+def test_migration_preserves_sqlite_wal_shm_and_rejects_missing_or_extra_files(tmp_path):
     old = tmp_path / 'old'
     new = tmp_path / 'new'
     old.mkdir()
     new.mkdir()
-    (old / 'tasks.yml').write_text('tasks: []\n')
-    (new / 'tasks.yml').write_text('tasks: []\n')
-    (old / 'state.db-wal').write_bytes(b'pending SQLite changes')
-    with pytest.raises(MigrationError, match='SQLite'):
+    for name, content in [('places.sqlite', b'database'),
+                          ('places.sqlite-wal', b'pending SQLite changes'),
+                          ('places.sqlite-shm', b'SQLite shared memory')]:
+        (old / name).write_bytes(content)
+        (new / name).write_bytes(content)
+    assert verify_migration(old, new) == 3
+    (new / 'places.sqlite-wal').unlink()
+    with pytest.raises(MigrationError, match='no coinciden'):
         verify_migration(old, new)
-    (old / 'state.db-wal').unlink()
+    (new / 'places.sqlite-wal').write_bytes(b'pending SQLite changes')
     (new / 'unknown.file').write_text('not in old data')
-    with pytest.raises(MigrationError):
+    with pytest.raises(MigrationError, match='no coinciden'):
         verify_migration(old, new)
+
+
+def test_copy_migration_copies_firefox_sidecars_without_changing_source(tmp_path):
+    old = tmp_path / 'old'
+    new = tmp_path / 'new'
+    sub = old / 'browser-profiles' / 'camoufox' / 'test'
+    sub.mkdir(parents=True)
+    new.mkdir()
+    (sub / 'history.sqlite').write_bytes(b'synthetic database')
+    (sub / 'history.sqlite-wal').write_bytes(b'synthetic pending journal')
+    (sub / 'history.sqlite-shm').write_bytes(b'synthetic shared-memory index')
+    before = {p.relative_to(old): p.read_bytes() for p in old.rglob('*') if p.is_file()}
+
+    def copy(src, dst):
+        shutil.copytree(src, dst, dirs_exist_ok=True)
+
+    assert copy_migration(old, new, copier=copy) == 3
+    assert before == {p.relative_to(new): p.read_bytes() for p in new.rglob('*') if p.is_file()}
+    assert before == {p.relative_to(old): p.read_bytes() for p in old.rglob('*') if p.is_file()}
+
+
+def test_copy_migration_refuses_source_changed_while_copying(tmp_path):
+    old = tmp_path / 'old'
+    new = tmp_path / 'new'
+    old.mkdir()
+    new.mkdir()
+    (old / 'history.sqlite-wal').write_bytes(b'before')
+
+    def changing_copy(src, dst):
+        shutil.copytree(src, dst, dirs_exist_ok=True)
+        (old / 'history.sqlite-wal').write_bytes(b'after')
+
+    with pytest.raises(MigrationError, match='cambiaron'):
+        copy_migration(old, new, copier=changing_copy)
+    assert (old / 'history.sqlite-wal').read_bytes() == b'after'
+
+
+def test_copy_migration_rejects_partial_copy_and_nonempty_staging(tmp_path):
+    old = tmp_path / 'old'
+    new = tmp_path / 'new'
+    old.mkdir()
+    new.mkdir()
+    (old / 'history.sqlite-wal').write_bytes(b'keep')
+
+    def incomplete_copy(src, dst):
+        (dst / 'history.sqlite').write_bytes(b'incomplete')
+
+    with pytest.raises(MigrationError, match='no coinciden'):
+        copy_migration(old, new, copier=incomplete_copy)
+    with pytest.raises(MigrationError, match='no está vacía'):
+        copy_migration(old, new, copier=incomplete_copy)
+
+
+def test_inventory_fails_closed_if_private_directory_cannot_be_read(tmp_path, monkeypatch):
+    from scripts import verify_private_migration as verifier
+
+    old = tmp_path / 'old'
+    old.mkdir()
+    original_walk = verifier.os.walk
+
+    def unreadable_walk(*args, **kwargs):
+        kwargs['onerror'](OSError('Unreadable synthetic Firefox directory'))
+        yield from original_walk(*args, **kwargs)
+
+    monkeypatch.setattr(verifier.os, 'walk', unreadable_walk)
+    with pytest.raises(MigrationError, match='por completo'):
+        verify_migration(old, old)
 
 
 def test_migration_refuses_links_to_external_private_data(tmp_path):
@@ -157,7 +228,9 @@ def test_local_compilation_has_verification_and_recovery_guards():
     control = (root / 'scripts/compilar_portable.ps1').read_text(encoding='utf-8')
     assert 'Get-CimInstance -ClassName Win32_Process' in control
     assert 'verify_private_migration.py' in control
-    assert control.count('EjecutarPython $python @($migration,') == 2
+    assert control.count('EjecutarPython $python @($migration,') == 1
+    assert "'--copy'" in control
+    assert 'Get-CimInstance -ClassName Win32_Process -ErrorAction Stop' in control
     assert 'ComprobarPortable $candidate' in control
     assert 'Get-FileHash -Algorithm SHA256' in control
     assert control.index("ComprobarPortable $candidate") < control.index(
